@@ -11,17 +11,19 @@
     "test": "feltkit test",
     "typecheck": "tsc --noEmit",
     "codegen": "feltkit codegen",
-    "test:artifact": "feltkit build --target appboundry && node --import tsx --test tests-artifact/*.test.ts"
+    "test:artifact": "feltkit build --target appboundry && node --import tsx --test tests-artifact/*.test.ts",
+    "test:appboundry": "feltkit build --target appboundry && tsx scripts/appboundry-acceptance.mts ledger.app"
   },
   "dependencies": {
-    "@feltdb/feltkit": "file:vendor/feltkit/feltdb-feltkit-0.3.25-66e4a11.tgz",
-    "@stack-ui/core": "file:vendor/stack-ui/core",
-    "@stack-ui/react": "file:vendor/stack-ui/react",
-    "@stack-ui/tokens": "file:vendor/stack-ui/tokens",
+    "@feltdb/feltkit": "file:vendor/feltkit/feltdb-feltkit-0.3.26-91c4be4.tgz",
+    "@stack-ui/core": "0.9.0",
+    "@stack-ui/react": "0.9.0",
+    "@stack-ui/tokens": "0.9.0",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@appport/appboundry": "1.12.0",
     "@types/node": "22.19.1",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
