@@ -17,6 +17,7 @@ import type * as overview_module from "../overview.js";
 import type * as payments_module from "../payments.js";
 import type * as reconciliation_module from "../reconciliation.js";
 import type * as reports_module from "../reports.js";
+import type * as review_module from "../review.js";
 
 /** Typed references to every query and mutation. Type-only imports: no backend code reaches the browser. */
-export const api = createApi<{ "accounts": typeof accounts_module; "activity": typeof activity_module; "app": typeof app_module; "banking": typeof banking_module; "bills": typeof bills_module; "contacts": typeof contacts_module; "expenses": typeof expenses_module; "inbox": typeof inbox_module; "integrity": typeof integrity_module; "invoices": typeof invoices_module; "journal": typeof journal_module; "org": typeof org_module; "overview": typeof overview_module; "payments": typeof payments_module; "reconciliation": typeof reconciliation_module; "reports": typeof reports_module }>();
+export const api = createApi<{ "accounts": typeof accounts_module; "activity": typeof activity_module; "app": typeof app_module; "banking": typeof banking_module; "bills": typeof bills_module; "contacts": typeof contacts_module; "expenses": typeof expenses_module; "inbox": typeof inbox_module; "integrity": typeof integrity_module; "invoices": typeof invoices_module; "journal": typeof journal_module; "org": typeof org_module; "overview": typeof overview_module; "payments": typeof payments_module; "reconciliation": typeof reconciliation_module; "reports": typeof reports_module; "review": typeof review_module }>();

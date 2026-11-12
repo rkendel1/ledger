@@ -9,3 +9,8 @@ import type { Schema } from "@feltdb/feltkit";
 export function report<T>(): Schema<T> {
   return s.record(s.unknown()) as unknown as Schema<T>;
 }
+
+/** A list of report rows: published as an array of JSON objects, typed as the function's own rows. */
+export function reportList<T>(): Schema<T[]> {
+  return s.array(s.record(s.unknown())) as unknown as Schema<T[]>;
+}
