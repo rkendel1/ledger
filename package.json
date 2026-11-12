@@ -14,7 +14,7 @@
     "test:artifact": "feltkit build --target appboundry && node --import tsx --test tests-artifact/*.test.ts"
   },
   "dependencies": {
-    "@feltdb/feltkit": "0.3.25",
+    "@feltdb/feltkit": "file:vendor/feltkit/feltdb-feltkit-0.3.25-66e4a11.tgz",
     "@stack-ui/core": "file:vendor/stack-ui/core",
     "@stack-ui/react": "file:vendor/stack-ui/react",
     "@stack-ui/tokens": "file:vendor/stack-ui/tokens",

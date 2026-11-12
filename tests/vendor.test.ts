@@ -25,3 +25,12 @@ test("vendored Stack UI matches its SHA256SUMS, file for file", () => {
   const version = JSON.parse(readFileSync(join(root, "core", "package.json"), "utf8")).version;
   assert.equal(version, "0.9.0");
 });
+
+test("the vendored FeltKit pre-release is the recorded tarball, and package.json installs exactly it", () => {
+  const dir = join(process.cwd(), "vendor", "feltkit");
+  const [line] = readFileSync(join(dir, "SHA256SUMS"), "utf8").trim().split("\n");
+  const [sum, file] = line!.split(/\s+/);
+  assert.equal(createHash("sha256").update(readFileSync(join(dir, file!))).digest("hex"), sum, `${file} was modified`);
+  const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8"));
+  assert.equal(pkg.dependencies["@feltdb/feltkit"], `file:vendor/feltkit/${file}`);
+});
