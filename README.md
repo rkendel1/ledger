@@ -20,7 +20,7 @@ creates a starting chart of accounts. Production uses FeltKit's built-in account
 people sign up, create an organization, and invite members with a role.
 
 ```bash
-npm test                 # 28 tests, each on a fresh FeltDB instance
+npm test                 # 30 tests, each on a fresh FeltDB instance
 npx tsc --noEmit         # typecheck
 npx feltkit build        # production build
 npm start                # run the production build
@@ -30,7 +30,7 @@ npm start                # run the production build
 
 | Area | |
 |---|---|
-| Overview | Cash, receivables, payables, year-to-date results, review queue, bank status, recent entries — each linked to its records |
+| Overview | Cash, receivables, payables, year-to-date results, monthly income/expense and cash-flow charts, expense mix, balance sparklines, review queue, bank status, recent entries — each linked to its records |
 | Banking | Bank and card accounts, CSV import with duplicate detection, match / categorize / split / exclude, reconciliation |
 | Transactions | Journal entries: drafts, posting, reversal, full history |
 | Invoices | Customers, invoices with tax, payments, credit notes, void |
@@ -40,6 +40,9 @@ npm start                # run the production build
 | Reports | P&L, balance sheet, cash flow, trial balance, general ledger, AR/AP aging, what changed |
 | Activity | Review queue, proposals and decisions, audit trail |
 | Settings | Organization, members and roles, integrity check, notifications |
+
+Charts come from [Stack UI](https://github.com/rkendel1/stack-ui) 0.9.0, vendored unmodified in `vendor/stack-ui`
+(checked by `tests/vendor.test.ts`).
 
 ## Documents
 

@@ -29,6 +29,17 @@ tests/                    feltkit test suites (m0–m4) and helpers
 tests-artifact/           AppBoundry artifact test
 ```
 
+## Charts (stack-ui 0.9.0)
+
+| Where | Chart | Data |
+|---|---|---|
+| Overview | Income and expenses by month (bar), net cash flow by month (area), expenses by category (donut, centre = P&L total), cash-account balance sparklines | `reports:trends` (last 12 months), `reports:profitAndLoss` (fiscal YTD) |
+| Reports → Trends | Revenue, expenses and net income (line); month-end cash and bank (area) | `reports:trends` for the selected range |
+| Reports → Profit & loss | Where the money went (donut) | `reports:profitAndLoss` |
+| Accounting → account | Balance over time (step line) | `accounts:history` |
+
+Each chart has loading and empty states and a data table. With no postings the charts say so; nothing is invented.
+
 ## Decisions worth knowing
 
 - **Ledger lines are the only posted truth.** Drafts keep lines on the header; they never reach
@@ -55,6 +66,7 @@ tests-artifact/           AppBoundry artifact test
 - Receipts cannot be removed once attached (by design, evidence is preserved), and are limited to 10 MB.
 - The UI uses browser `prompt()`/`confirm()` for reasons on void/reverse/reject.
 - Studio, MCP and the AppPort HTTP surface were not exercised by Ledger's tests.
+- Charts were checked by hand in the browser (desktop, 390px, light theme) on test postings; Ledger has no automated browser test of its pages. The chart components themselves are tested in stack-ui.
 - Browser receipt upload (`expenses:uploadLink` → `client.uploadFile` → `expenses:attach`) was not exercised; server-side upload (`expenses:upload`) is tested.
 
 ## Verification commands

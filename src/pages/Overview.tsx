@@ -1,9 +1,17 @@
-import { api, Badge, Card, Empty, fmtDate, Link, Loading, Money, Page, SOURCE_LABEL, useQuery } from "../lib";
+import { AreaChart, BarChart, DonutChart, Sparkline } from "@stack-ui/react";
+import { api, Badge, Card, Empty, fmt, fmtDate, Link, Loading, Money, monthsBack, Page, SOURCE_LABEL, useChartMoney, useQuery } from "../lib";
 
 export function Overview() {
   const o = useQuery(api.overview.get, {});
   const queue = useQuery(api.review.queue, {});
+  const from = o ? monthsBack(o.asOf, 11) : "";
+  const trends = useQuery(api.reports.trends, o ? { from, to: o.asOf } : "skip");
+  const pl = useQuery(api.reports.profitAndLoss, o ? { from: o.fiscalYearStart, to: o.asOf } : "skip");
+  const money = useChartMoney();
   if (!o) return <Loading />;
+  const months = trends?.months ?? [];
+  const posted = months.some((m) => m.revenueMinor || m.expensesMinor || m.netCashFlowMinor);
+  const sparkFor = (accountId: string) => trends?.cashAccounts.find((a) => a.accountId === accountId)?.balances ?? [];
   return (
     <Page title={o.organization} subtitle={`As of ${fmtDate(o.asOf)} · fiscal year from ${fmtDate(o.fiscalYearStart)}`}>
       <div className="kpis">
@@ -14,7 +22,43 @@ export function Overview() {
         <Kpi label="Expenses (YTD)" to="reports/pl" minor={o.yearToDate.expensesMinor} />
         <Kpi label="Net income (YTD)" to="reports/pl" minor={o.yearToDate.netIncomeMinor} />
       </div>
-      <div className="grid2">
+      <div className="grid2 charts">
+        <Card>
+          <BarChart
+            title="Income and expenses by month"
+            description={`Posted revenue and expenses, ${fmtDate(from)} – ${fmtDate(o.asOf)}`}
+            format={money}
+            loading={trends === undefined}
+            emptyTitle="No income or expenses posted yet"
+            emptyBody="Bars appear as invoices, bills and expenses are posted."
+            series={posted ? [
+              { id: "revenue", label: "Revenue", data: months.map((m) => ({ x: m.label, y: m.revenueMinor })) },
+              { id: "expenses", label: "Expenses", data: months.map((m) => ({ x: m.label, y: m.expensesMinor })) },
+            ] : []}
+          />
+        </Card>
+        <Card>
+          <AreaChart
+            title="Net cash flow by month"
+            description="Change in cash and bank accounts each month"
+            format={money}
+            loading={trends === undefined}
+            emptyTitle="No cash movement yet"
+            series={posted ? [{ id: "cash", label: "Net cash flow", data: months.map((m) => ({ x: m.label, y: m.netCashFlowMinor })) }] : []}
+          />
+        </Card>
+        <Card>
+          <DonutChart
+            title="Expenses by category"
+            description={`Fiscal year to date, from ${fmtDate(o.fiscalYearStart)}`}
+            format={money}
+            loading={pl === undefined}
+            centerValue={pl ? fmt(pl.totalCostOfSalesMinor + pl.totalExpensesMinor, o.currency) : undefined}
+            centerLabel="Total expenses"
+            emptyTitle="No expenses posted this fiscal year"
+            series={pl && pl.expenses.length + pl.costOfSales.length ? [{ id: "expenses", label: "Expenses", data: [...pl.costOfSales, ...pl.expenses].map((r) => ({ x: `${r.number} ${r.name}`, y: r.amountMinor })) }] : []}
+          />
+        </Card>
         <Card title="Needs attention" actions={<Link to="activity">All</Link>}>
           {queue === undefined ? <Loading /> : queue.length === 0 ? <Empty>Nothing needs attention.</Empty> : (
             <ul className="queue">
@@ -42,7 +86,13 @@ export function Overview() {
           )}
           <h3>Cash by account</h3>
           <table className="t"><tbody>
-            {o.cash.accounts.map((c) => <tr key={c.accountId}><td><Link to={`accounting/account/${c.accountId}`}>{c.number} · {c.name}</Link></td><td className="num"><Money minor={c.balanceMinor} /></td></tr>)}
+            {o.cash.accounts.map((c) => (
+              <tr key={c.accountId}>
+                <td><Link to={`accounting/account/${c.accountId}`}>{c.number} · {c.name}</Link></td>
+                <td>{trends ? <Sparkline label={`${c.name} month-end balance, last 12 months`} format={money} endpoints width={96} height={24} data={sparkFor(c.accountId).map((y, i) => ({ x: i, y }))} xType="number" /> : null}</td>
+                <td className="num"><Money minor={c.balanceMinor} /></td>
+              </tr>
+            ))}
           </tbody></table>
         </Card>
         <Card title="Outstanding invoices" actions={<Link to="invoices">All invoices</Link>}>

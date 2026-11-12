@@ -1,23 +1,25 @@
 import { useState } from "react";
-import { api, Badge, Card, Empty, Field, fmtDate, Link, Loading, Money, monthStart, Page, Tabs, today, useQuery, yearStart } from "../lib";
+import { AreaChart, DonutChart, LineChart } from "@stack-ui/react";
+import { api, Badge, Card, Empty, Field, fmt, fmtDate, Link, Loading, Money, monthStart, Page, Tabs, today, useChartMoney, useQuery, yearStart } from "../lib";
 
-type Tab = "pl" | "balance" | "cashflow" | "tb" | "gl" | "ar" | "ap" | "explain";
+type Tab = "pl" | "trends" | "balance" | "cashflow" | "tb" | "gl" | "ar" | "ap" | "explain";
 
 export function Reports({ path }: { path: string[] }) {
   const tab = (path[0] as Tab) || "pl";
   const [from, setFrom] = useState(yearStart());
   const [to, setTo] = useState(today());
   const setTab = (t: Tab) => { window.location.hash = `/reports/${t}`; };
-  const ranged = ["pl", "cashflow", "gl", "explain"].includes(tab);
+  const ranged = ["pl", "trends", "cashflow", "gl", "explain"].includes(tab);
   return (
     <Page title="Reports" subtitle="Computed from posted entries each time you open them. Click an account to see the entries behind it.">
-      <Tabs value={tab} onChange={setTab} tabs={[["pl", "Profit & loss"], ["balance", "Balance sheet"], ["cashflow", "Cash flow"], ["tb", "Trial balance"], ["gl", "General ledger"], ["ar", "AR aging"], ["ap", "AP aging"], ["explain", "What changed"]]} />
+      <Tabs value={tab} onChange={setTab} tabs={[["pl", "Profit & loss"], ["trends", "Trends"], ["balance", "Balance sheet"], ["cashflow", "Cash flow"], ["tb", "Trial balance"], ["gl", "General ledger"], ["ar", "AR aging"], ["ap", "AP aging"], ["explain", "What changed"]]} />
       <div className="range">
         {ranged ? <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field> : null}
         <Field label={ranged ? "To" : "As of"}><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         {ranged ? <span className="quick"><button className="small" onClick={() => { setFrom(monthStart()); setTo(today()); }}>This month</button><button className="small" onClick={() => { setFrom(yearStart()); setTo(today()); }}>Year to date</button></span> : null}
       </div>
       {tab === "pl" ? <PL from={from} to={to} /> : null}
+      {tab === "trends" ? <Trends from={from} to={to} /> : null}
       {tab === "balance" ? <Balance asOf={to} /> : null}
       {tab === "cashflow" ? <CashFlow from={from} to={to} /> : null}
       {tab === "tb" ? <TB asOf={to} /> : null}
@@ -43,8 +45,23 @@ function Section({ title, rows, total }: { title: string; rows: Row[]; total: nu
 
 function PL({ from, to }: { from: string; to: string }) {
   const r = useQuery(api.reports.profitAndLoss, from <= to ? { from, to } : "skip");
+  const settings = useQuery(api.org.settings, {});
+  const money = useChartMoney({ cents: true });
   if (!r) return <Loading />;
+  const spend = [...r.costOfSales, ...r.expenses];
   return (
+    <>
+    <Card>
+      <DonutChart
+        title="Where the money went"
+        description={`Expenses by account, ${fmtDate(from)} – ${fmtDate(to)}`}
+        format={money}
+        centerValue={fmt(r.totalCostOfSalesMinor + r.totalExpensesMinor, settings?.baseCurrency)}
+        centerLabel="Total expenses"
+        emptyTitle="No expenses in this range"
+        series={spend.length ? [{ id: "expenses", label: "Expenses", data: spend.map((x) => ({ x: `${x.number} ${x.name}`, y: x.amountMinor })) }] : []}
+      />
+    </Card>
     <Card title={`Profit and loss · ${fmtDate(from)} – ${fmtDate(to)}`}>
       <table className="t report"><tbody>
         <Section title="Revenue" rows={r.revenue} total={r.totalRevenueMinor} />
@@ -55,6 +72,42 @@ function PL({ from, to }: { from: string; to: string }) {
         <tr className="total"><td>Net income</td><td className="num"><Money minor={r.netIncomeMinor} /></td></tr>
       </tbody></table>
     </Card>
+    </>
+  );
+}
+
+/** Monthly trends from reports:trends: every value is a sum of posted ledger lines. */
+function Trends({ from, to }: { from: string; to: string }) {
+  const r = useQuery(api.reports.trends, from <= to ? { from, to } : "skip");
+  const money = useChartMoney();
+  if (!r) return <Loading />;
+  const any = r.months.some((m) => m.revenueMinor || m.expensesMinor || m.netCashFlowMinor);
+  const by = (key: "revenueMinor" | "expensesMinor" | "netIncomeMinor" | "netCashFlowMinor" | "closingCashMinor") => r.months.map((m) => ({ x: m.start.slice(0, 7) + "-01", y: m[key] }));
+  return (
+    <>
+      <Card>
+        <LineChart
+          title="Revenue, expenses and net income"
+          description={`By month, ${fmtDate(from)} – ${fmtDate(to)}`}
+          xType="time" format={money} points
+          emptyTitle="Nothing posted in this range"
+          series={any ? [
+            { id: "revenue", label: "Revenue", data: by("revenueMinor") },
+            { id: "expenses", label: "Expenses", data: by("expensesMinor") },
+            { id: "net", label: "Net income", data: by("netIncomeMinor") },
+          ] : []}
+        />
+      </Card>
+      <Card>
+        <AreaChart
+          title="Cash and bank balance"
+          description={`Month-end total of cash and bank accounts (opening ${fmt(r.openingCashMinor, money.currency)})`}
+          xType="time" format={money}
+          emptyTitle="No cash accounts"
+          series={r.months.length ? [{ id: "cash", label: "Cash and bank", data: by("closingCashMinor") }] : []}
+        />
+      </Card>
+    </>
   );
 }
 

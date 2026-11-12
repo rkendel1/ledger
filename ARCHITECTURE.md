@@ -100,6 +100,10 @@ No model is called anywhere. The Intelligence service is not enabled.
 
 ## Frontend
 
+Charts are Stack UI components (`@stack-ui/react` 0.9.0, vendored in `vendor/stack-ui`): Ledger computes every
+figure (`reports:trends`, `reports:profitAndLoss`, `accounts:history`) in integer minor units and passes them with a
+currency format (`divisor: 100`); the components only present them. Ledger contains no chart rendering code.
+
 React 19 + Vite, hash routing, FeltKit live queries (`useQuery` re-runs when the data it read changes).
 Sign-in, organization creation/switching and member management are FeltKit's own components. Controls
 are hidden when the caller lacks a permission (`org:me` returns the server's permission list); the server

@@ -344,3 +344,71 @@ export const explainChange = app.query({
     return explainChangeData(ctx, a);
   },
 });
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Monthly figures for charts, computed in one pass over posted ledger lines: revenue (revenue and
+ * other income), expenses (cost of sales and expenses), net income, net change in cash and bank, and
+ * each cash or bank account's balance at month end. Months are calendar months clipped to [from, to].
+ * Every figure is reproducible from the general ledger; the sum of the months equals the P&L for the range.
+ */
+export async function trendsData(ctx: Ctx, from: string, to: string) {
+  const accs = await loadAccounts(ctx);
+  const byId = new Map(accs.map((a) => [a.id, a]));
+  const months: Array<{ month: string; label: string; start: string; end: string }> = [];
+  let y = Number(from.slice(0, 4));
+  let m = Number(from.slice(5, 7));
+  while (`${y}-${String(m).padStart(2, "0")}` <= to.slice(0, 7)) {
+    const key = `${y}-${String(m).padStart(2, "0")}`;
+    const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    months.push({ month: key, label: `${MONTH_NAMES[m - 1]} ${y}`, start: `${key}-01` < from ? from : `${key}-01`, end: last > to ? to : last });
+    if (++m > 12) { m = 1; y++; }
+    if (months.length > 240) fail("INVALID_ARGUMENT", "Choose a range of at most 20 years.");
+  }
+  const rows = months.map((x) => ({ ...x, revenueMinor: 0, expensesMinor: 0, netIncomeMinor: 0, netCashFlowMinor: 0, closingCashMinor: 0 }));
+  const index = new Map(months.map((x, i) => [x.month, i]));
+  const cashAccounts = accs.filter((a) => a.subtype === "cash" || a.subtype === "bank");
+  const cashChange = new Map(cashAccounts.map((a) => [a.id, months.map(() => 0)]));
+  const cashOpening = new Map(cashAccounts.map((a) => [a.id, 0]));
+  for (const l of await ctx.db.find(ledgerLines, {})) {
+    if (l.date > to) continue;
+    const a = byId.get(l.accountId);
+    if (!a) continue;
+    if (l.date < from) {
+      if (cashOpening.has(a.id)) cashOpening.set(a.id, cashOpening.get(a.id)! + l.debit - l.credit);
+      continue;
+    }
+    const i = index.get(l.date.slice(0, 7))!;
+    const r = rows[i]!;
+    if (a.type === "revenue") r.revenueMinor += l.credit - l.debit;
+    if (a.type === "expense") r.expensesMinor += l.debit - l.credit;
+    if (cashChange.has(a.id)) { cashChange.get(a.id)![i]! += l.debit - l.credit; r.netCashFlowMinor += l.debit - l.credit; }
+  }
+  let cash = [...cashOpening.values()].reduce((t, v) => t + v, 0);
+  const openingCashMinor = cash;
+  for (const r of rows) {
+    r.netIncomeMinor = r.revenueMinor - r.expensesMinor;
+    cash += r.netCashFlowMinor;
+    r.closingCashMinor = cash;
+  }
+  const accounts = cashAccounts.map((a) => {
+    let balance = cashOpening.get(a.id)!;
+    return { accountId: a.id, number: a.number, name: a.name, balances: cashChange.get(a.id)!.map((d) => (balance += d)) };
+  });
+  return { from, to, openingCashMinor, months: rows, cashAccounts: accounts };
+}
+
+export const trends = app.query({
+  access: "reports.read",
+  args: { from: s.string(), to: s.string() },
+  returns: report<Awaited<ReturnType<typeof trendsData>>>(),
+  capability: { name: "reports.trends", description: "Monthly revenue, expenses, net income, net cash flow and month-end cash balances." },
+  handler: async (ctx, a) => {
+    await requireSettings(ctx);
+    requireDate(a.from, "from");
+    requireDate(a.to, "to");
+    if (a.from > a.to) fail("INVALID_ARGUMENT", "from must be on or before to.");
+    return trendsData(ctx, a.from, a.to);
+  },
+});

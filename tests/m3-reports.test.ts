@@ -19,7 +19,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { api } from "../feltkit/_generated/api.js";
-import { assertIntegrity, newOrg, withApp, type Org } from "./_helpers.js";
+import { assertIntegrity, newOrg, rejectsWith, withApp, type Org } from "./_helpers.js";
 
 async function month(org: Org) {
   const A = org.acct;
@@ -129,4 +129,28 @@ test("the audit trail records who did what, in order, with the request that did 
     assert.ok(logged!.writes!.length > 0);
     // Subledger integrity: AR and AP equal their open documents.
     await assertIntegrity(org);
+  }));
+
+test("monthly trends for charts come from the ledger and agree with the P&L, cash flow and balances", () =>
+  withApp(async (t) => {
+    const org = await newOrg(t);
+    await month(org);
+    const tr = await org.reviewer.query(api.reports.trends, { from: "2026-01-01", to: "2026-03-31" });
+    assert.deepEqual(tr.months.map((m) => [m.month, m.label, m.revenueMinor, m.expensesMinor, m.netIncomeMinor, m.netCashFlowMinor, m.closingCashMinor]), [
+      ["2026-01", "Jan 2026", 200_000, 80_000, 120_000, -190_000, 810_000],
+      ["2026-02", "Feb 2026", 0, 0, 0, 100_000, 910_000],
+      ["2026-03", "Mar 2026", 0, 0, 0, 0, 910_000],
+    ]);
+    assert.equal(tr.openingCashMinor, 1_000_000);
+    const bank = tr.cashAccounts.find((a) => a.number === "1010")!;
+    assert.deepEqual(bank.balances, [810_000, 910_000, 910_000]);
+    // Consistency with the authoritative reports.
+    const pl = await org.reviewer.query(api.reports.profitAndLoss, { from: "2026-01-01", to: "2026-03-31" });
+    assert.equal(tr.months.reduce((s, m) => s + m.netIncomeMinor, 0), pl.netIncomeMinor);
+    const cf = await org.reviewer.query(api.reports.cashFlow, { from: "2026-01-01", to: "2026-03-31" });
+    assert.equal(tr.months.reduce((s, m) => s + m.netCashFlowMinor, 0), cf.actualCashChangeMinor);
+    // Partial months are clipped to the range; drafts never count.
+    const mid = await org.reviewer.query(api.reports.trends, { from: "2026-01-20", to: "2026-01-31" });
+    assert.deepEqual(mid.months.map((m) => [m.start, m.end, m.expensesMinor]), [["2026-01-20", "2026-01-31", 30_000]]);
+    await rejectsWith(org.reviewer.query(api.reports.trends, { from: "2026-02-01", to: "2026-01-01" }), "INVALID_ARGUMENT");
   }));

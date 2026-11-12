@@ -1,7 +1,7 @@
 # Acceptance tests
 
-`npm test` runs 28 tests (`tests/*.test.ts`), each against a fresh FeltDB instance with a real
-organization whose members joined through real FeltKit invitations. Last run: **28 passed, 0 failed**.
+`npm test` runs 30 tests (`tests/*.test.ts`), each against a fresh FeltDB instance with a real
+organization whose members joined through real FeltKit invitations. Last run: **30 passed, 0 failed**.
 `npm run test:artifact` builds the AppBoundry artifact and runs `tests-artifact/` (1 passed).
 Most scenarios end with `assertIntegrity`, which recomputes every ledger invariant from stored records.
 
@@ -24,6 +24,8 @@ Most scenarios end with `assertIntegrity`, which recomputes every ledger invaria
 | Complete reconciliation | m2 | Pass |
 | Attach and retrieve receipts | m1 expenses (bytes identical, also after restart) | Pass |
 | Generate financial reports | m3 (hand-computed answers) | Pass |
+| Chart data equals the ledger | m3 "monthly trends …" (known answers; sums equal the P&L and the cash flow's actual cash change) | Pass |
+| Vendored Stack UI unmodified | vendor.test.ts (every file against SHA256SUMS) | Pass |
 | **Security** | | |
 | Cross-tenant access rejected | m1 tenant isolation (reads, writes, payments, journal, receipts, non-member) | Pass |
 | Unauthorized journal posting | m0 drafts (bookkeeper cannot post) | Pass |

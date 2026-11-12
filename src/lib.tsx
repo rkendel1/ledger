@@ -20,6 +20,19 @@ export function fmt(minor: number | undefined | null, currency = "USD", opts: { 
   return `${sign}${sym}${whole}.${cents}`;
 }
 
+/** How charts write this organization's amounts: they arrive as integer minor units from the ledger. */
+export function useChartMoney(options: { compact?: boolean; cents?: boolean } = {}) {
+  const currency = useContext(CurrencyContext);
+  return { style: "currency" as const, currency, divisor: 100, ...(options.cents ? {} : { maximumFractionDigits: 0 }), ...(options.compact ? { compact: true } : {}) };
+}
+
+/** The first day of the month `back` months before the month of `day`. */
+export function monthsBack(day: string, back: number) {
+  const d = new Date(`${day.slice(0, 7)}-01T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() - back);
+  return d.toISOString().slice(0, 10);
+}
+
 export function Money({ minor, sign, muted }: { minor: number | undefined | null; sign?: boolean; muted?: boolean }) {
   const currency = useContext(CurrencyContext);
   return <span className={`money${minor !== undefined && minor !== null && minor < 0 ? " neg" : ""}${muted ? " muted" : ""}`}>{fmt(minor, currency, { sign })}</span>;

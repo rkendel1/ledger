@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { AccountSelect, api, Badge, Card, Empty, Field, fmtDate, fmtTime, Link, Loading, Modal, Money, MoneyInput, Page, parseMoney, SOURCE_LABEL, Tabs, useCan, useMutation, useQuery, useRun } from "../lib";
+import { LineChart } from "@stack-ui/react";
+import { AccountSelect, api, Badge, Card, Empty, Field, fmtDate, fmtTime, Link, Loading, Modal, Money, MoneyInput, Page, parseMoney, SOURCE_LABEL, Tabs, useCan, useChartMoney, useMutation, useQuery, useRun } from "../lib";
 
 const TYPES = ["asset", "liability", "equity", "revenue", "expense"] as const;
 const SUBTYPES: Record<string, string[]> = {
@@ -105,9 +106,23 @@ function AccountHistory({ id }: { id: string }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const h = useQuery(api.accounts.history, { accountId: id, ...(from ? { from } : {}), ...(to ? { to } : {}) });
+  const money = useChartMoney({ cents: true });
   if (!h) return <Loading />;
+  // The running balance at the end of each day with activity (the last row of that day).
+  const daily = new Map<string, number>();
+  for (const r of h.rows) daily.set(r.date, r.balance);
   return (
     <Page title={`${h.account.number} · ${h.account.name}`} subtitle={`${h.account.type} · ${h.account.subtype.replace(/_/g, " ")} · every balance below is the running sum of posted lines`}>
+      {h.rows.length ? (
+        <Card>
+          <LineChart
+            title="Balance over time"
+            description="End-of-day balance after each day with posted activity"
+            xType="time" format={money} zeroBaseline={false} legend={false} curve="step"
+            series={[{ id: "balance", label: "Balance", data: [...daily].map(([x, y]) => ({ x, y })) }]}
+          />
+        </Card>
+      ) : null}
       <Card actions={<span className="actions"><Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field><Field label="To"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field></span>}>
         {h.rows.length === 0 ? <Empty>No posted lines in this range.</Empty> : (
           <table className="t">

@@ -45,3 +45,23 @@ Inspected in the published packages (`node_modules/@feltdb/feltkit/dist`, `@appp
 | G-13 | Single currency only. | `expenses.ts` refuses a non-base currency. | Foreign-currency spend must be converted before entry. | Medium | Ledger | Clear refusal message. |
 | G-14 | Opening receivables and payables can only be entered as documents, not as opening balances. | `setOpeningBalances` refuses AR/AP (control-account rule). | Migrating an existing business needs its open invoices and bills re-entered. | Low | Ledger | Enter them as invoices/bills dated before go-live (their revenue/expense then lands in that earlier period, i.e. prior-year earnings). |
 | G-15 | No live bank connectivity. | By design for this version. | CSV import only. | — | Ledger (behind an explicit contract, later) | — |
+
+## Visualization (charts)
+
+Ledger needed revenue, expense, cash-flow, composition and balance charts. No Boundry platform package drew
+charts (searched FeltKit, AppBoundry, AppPort, AppPort Services and stack-ui, 2026-11-12), so every application
+would have chosen and wrapped its own library. This was solved in the platform, not in Ledger.
+
+| ID | Description | Evidence | Status / ownership |
+|---|---|---|---|
+| V-01 | No shared data-visualization capability in the FeltKit UI ecosystem. | stack-ui 0.8.1 contract §5: "Not in the initial inventory: charts … product-owned until two products need the same one". | **Implemented in stack-ui 0.9.0** (`rkendel1/stack-ui` branch `claude/happy-fermat-wynpur`, decision D38, `docs/charts.md`): `LineChart`, `AreaChart`, `BarChart`, `StackedBarChart`, `DonutChart`, `Sparkline`, native SVG, no dependencies. Not yet tagged or published: the owner tags the release. |
+| V-02 | Ledger is the only real consumer so far; stack-ui's rule wants two. | D38 records an owner-directed exception. | stack-ui. The next product dashboard (FeltKit Studio, FeltDB Studio) should adopt the charts. |
+| V-03 | stack-ui 0.9.0 is not on npm; Ledger vendors it. | `npm view @stack-ui/core` shows 0.8.1; stack-ui docs/release.md prescribes vendoring with `file:` dependencies until publishing. | Ledger vendors `vendor/stack-ui` with `scripts/vendor-packages.mjs`; `tests/vendor.test.ts` checks every file against `SHA256SUMS`, which equals stack-ui's recorded `releases/0.9.0/packages.SHA256SUMS`. Switch to npm once published. |
+| V-04 | `@stack-ui/core/html`, `/view` and `/dom` ship no TypeScript declarations (pre-existing). | stack-ui's packed-tarball consumer test failed on `@stack-ui/core/html` until it declared the module. | stack-ui. The new `@stack-ui/core/charts` entry point ships declarations. |
+| V-05 | Ledger's own layout scrolled horizontally at phone width (32px). | Found while checking charts at 390px: the shell's grid column took the navigation's min-content width. | Fixed in Ledger (`minmax(0, 1fr)`). Not a chart defect. |
+| V-06 | Ledger adopts only stack-ui's charts, tokens and core CSS, not its Shell or other components, so it does not pass stack-ui's application conformance check. | stack-ui docs/building-with-the-foundation.md. | Ledger. A full adoption is a separate change. |
+
+Measured (non-blank lines): stack-ui chart subsystem 575 (core) + 48 (types) + 100 (CSS) + 142 (React binding and
+types) + 42 (wiring) + 17 (tokens); tests 650; showcase 177; third-party runtime dependencies 0. Ledger's
+visualization-specific UI code is 136 lines that pass ledger data to those components; the monthly figures are a
+65-line Ledger query (`reports:trends`), tested against the P&L and cash-flow reports.
