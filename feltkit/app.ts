@@ -19,7 +19,7 @@ import { feltkit, s } from "@feltdb/feltkit";
 const READ = [
   "org.read", "accounts.read", "journal.read", "periods.read", "contacts.read", "invoices.read",
   "bills.read", "expenses.read", "banking.read", "reports.read", "audit.read", "proposals.read",
-  "files.read",
+  "files.read", "notifications.read", "notifications.update",
 ];
 
 /** Day-to-day bookkeeping: records activity, but cannot post manual journals, approve, or close. */
@@ -28,6 +28,7 @@ const BOOKKEEPING = [
   "contacts.write", "invoices.write", "invoices.issue", "payments.record",
   "bills.write", "bills.post", "expenses.write", "banking.import", "banking.categorize",
   "banking.match", "journal.draft", "proposals.create", "proposals.decide", "files.write",
+  "notifications.send",
 ];
 
 /** An accountant: everything financial, including posting, reversing, approving and closing periods. */
@@ -53,7 +54,7 @@ export const app = feltkit({
     reviewer: READ,
     // An agent member: reads the books and proposes. It cannot execute any financial action;
     // those functions are also `approval: "required"`, which FeltKit enforces for non-person callers.
-    assistant: [...READ.filter((p) => p !== "files.read"), "proposals.create"],
+    assistant: [...READ.filter((p) => !p.startsWith("files.") && !p.startsWith("notifications.")), "proposals.create"],
   },
   auth: {
     accounts: { roles: ["person"] },
@@ -71,6 +72,8 @@ export const app = feltkit({
   },
   services: {
     files: true,
+    // In-app notices to approvers (bills awaiting approval, expenses to review). Read from the inbox.
+    notifications: { types: ["bill.awaiting_approval", "expense.submitted"] },
   },
 });
 
@@ -260,7 +263,8 @@ export const invoices = app.collection(
   "invoices",
   {
     ...TENANT,
-    number: s.string(),
+    /** Assigned at issue from a gapless per-organization sequence ("INV-0001"); absent on drafts. */
+    number: s.optional(s.string()),
     customerId: s.string(),
     issueDate: date(),
     dueDate: date(),
@@ -314,6 +318,7 @@ export const bills = app.collection(
     approvedBy: s.optional(s.string()),
     approvedAt: s.optional(s.number()),
     journalEntryId: s.optional(s.string()),
+    voidEntryId: s.optional(s.string()),
     createdBy: s.string(),
     createdAt: s.number(),
   },
@@ -334,7 +339,11 @@ export const payments = app.collection(
     method: s.optional(s.string({ maxLength: 40 })),
     reference: s.optional(s.string({ maxLength: 120 })),
     journalEntryId: s.string(),
+    /** What the payment settled when recorded (kept as evidence; live settlement is `allocations`). */
+    applied: s.array(s.object({ documentType: s.enum(["invoice", "bill"] as const), documentId: s.string(), amountMinor: s.integer() })),
     idempotencyKey: s.optional(s.string({ maxLength: 120 })),
+    voidEntryId: s.optional(s.string()),
+    voidReason: s.optional(s.string()),
     createdBy: s.string(),
     createdAt: s.number(),
   },

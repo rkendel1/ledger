@@ -277,7 +277,7 @@ function aging<T extends { id: string; dueDate: string; balanceMinor: number }>(
 }
 
 export async function arAgingData(ctx: Ctx, asOf: string) {
-  return aging(await openInvoices(ctx, asOf), asOf, (d) => d.customerId, await contactNames(ctx), (d) => d.number);
+  return aging(await openInvoices(ctx, asOf), asOf, (d) => d.customerId, await contactNames(ctx), (d) => d.number ?? "(draft)");
 }
 
 export async function apAgingData(ctx: Ctx, asOf: string) {
