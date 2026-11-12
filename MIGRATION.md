@@ -7,11 +7,12 @@ what Ledger changed in response, and what an operator of an existing Ledger inst
 
 | Component | Before | Now |
 |---|---|---|
-| FeltKit | `@feltdb/feltkit` 0.3.25 (npm) | Vendored build of rkendel1/feltkit `claude/happy-fermat-wynpur` @ `66e4a11` (`vendor/feltkit`, checked by `tests/vendor.test.ts`). Reports version 0.3.25, but is **not** the published 0.3.25. |
-| AppBoundry host | Refused `ledger.app` (identity.tenancy), or ran it with organizations closed | rkendel1/appboundry `claude/happy-fermat-wynpur` @ `b706321`, from source (not published) |
+| FeltKit | `@feltdb/feltkit` 0.3.25 (npm) | Build of rkendel1/feltkit#114 @ `91c4be4` (FeltKit 0.3.26 plus the fixes; `vendor/feltkit`, checked by `tests/vendor.test.ts`). Reports 0.3.26, but is **not** the published 0.3.26, which lacks the fixes and does not run Ledger. #114 is not merged. |
+| AppBoundry | Refused `ledger.app` (identity.tenancy), or ran it with organizations closed | `@appport/appboundry` 1.12.0 from npm (dev dependency; `npm run test:appboundry`) |
+| Stack UI | Vendored 0.9.0 (`vendor/stack-ui`) | `@stack-ui/*` 0.9.0 from npm (identical files) |
 
 When FeltKit publishes these changes: set `@feltdb/feltkit` to that version in `package.json`, delete
-`vendor/feltkit` and its test in `tests/vendor.test.ts`, run `npm install`, `npm test`, `npm run test:artifact`.
+`vendor/feltkit` and `tests/vendor.test.ts`, run `npm install`, `npm test`, `npm run test:artifact`, `npm run test:appboundry`.
 
 ## What Ledger changed
 
@@ -46,7 +47,7 @@ No Ledger installation has been deployed, so no data migration was run. If one e
   with direct access to the Files records. FeltKit offers no application API for that today; this
   would need to be written and tested before upgrading a live installation.
 - **Jobs queued before the upgrade** have no organization record and run as before (no organization).
-  Ledger queued none on 0.3.25.
+  Ledger queued none before.
 
 ## On AppBoundry
 

@@ -11,7 +11,7 @@ What exists, how it was verified, and what does not exist yet. Platform findings
 | M2 Banking | Done | CSV import, normalization, duplicate detection, match, split categorization, exclude, unmatch-by-reversal, reconciliation sessions. |
 | M3 Reporting | Done | P&L, balance sheet, cash flow, trial balance, GL, account history, AR/AP aging, overview, audit view. |
 | M4 Agentic bookkeeping | Done, deterministic | Proposals, approval with separation of duties, three rules, review queue, report-change explanation. No model. |
-| M5 Production readiness | **Partial** | Node build verified. Runs on AppBoundry with organizations (reference host test and AppBoundry's own host over HTTP, production mode). FeltKit is a vendored pre-release (vendor/feltkit). No deployment, load test, recovery test, external security audit, or Boundry trial. |
+| M5 Production readiness | **Partial** | Node build verified. Runs on AppBoundry with organizations (reference host test, and the published AppBoundry 1.12.0 CLI over HTTP, production mode). FeltKit is a vendored pre-release (vendor/feltkit). No deployment, load test, recovery test, external security audit, or Boundry trial. |
 
 ## Layout
 
@@ -69,17 +69,17 @@ Each chart has loading and empty states and a data table. With no postings the c
 - Charts were checked by hand in the browser (desktop, 390px, light theme) on test postings; Ledger has no automated browser test of its pages. The chart components themselves are tested in stack-ui.
 - Browser receipt upload (`expenses:uploadLink` → `client.uploadFile` → `expenses:attach`) was not exercised; server-side upload (`expenses:upload`) is tested.
 - On AppBoundry, people cannot sign up or be invited by e-mail (no accounts@1): an operator issues sessions and provisions members.
-- FeltKit is a vendored, unpublished build (`vendor/feltkit`, reporting version 0.3.25). Replace it with a published version when one exists.
+- FeltKit is an unpublished build of rkendel1/feltkit#114 (`vendor/feltkit`, reporting version 0.3.26 but not the published 0.3.26, which lacks the fixes). Replace it when a release contains #114.
+- On AppBoundry in production, Ledger's browser UI has no way to sign in: the host serves no sign-in route and the UI does not accept an operator-issued token. The HTTP API works with operator-issued tokens. (By inspection; not tried in a browser.)
 
 ## Verification commands
 
 ```bash
 npm install
 npx tsc --noEmit                 # typecheck backend, UI and tests
-npm test                         # 34 tests against fresh FeltDB instances
+npm test                         # 33 tests against fresh FeltDB instances
 npx feltkit build                # Node build: bundle, schema contract, frontend, secret scan
 npm run test:artifact            # AppBoundry artifact build + core workflows in organizations
-# Ledger on AppBoundry's own host (needs an AppBoundry checkout; see the script's header):
-APPBOUNDRY_HOST=<appboundry>/packages/appboundry-host/dist/index.js npx tsx scripts/appboundry-acceptance.mts ledger.app
+npm run test:appboundry          # ledger.app on the published AppBoundry CLI (production, HTTP)
 npm run dev                      # http://localhost:3000, sign in as a development user
 ```

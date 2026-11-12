@@ -128,7 +128,7 @@ Crypto. Ledger uses `feltkit/_base64.ts` and FeltKit's `sha256Hex` for that.
 
 ## Frontend
 
-Charts are Stack UI components (`@stack-ui/react` 0.9.0, vendored in `vendor/stack-ui`): Ledger computes every
+Charts are Stack UI components (`@stack-ui/react` 0.9.0 from npm): Ledger computes every
 figure (`reports:trends`, `reports:profitAndLoss`, `accounts:history`) in integer minor units and passes them with a
 currency format (`divisor: 100`); the components only present them. Ledger contains no chart rendering code.
 

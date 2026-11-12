@@ -20,8 +20,9 @@ creates a starting chart of accounts. Production uses FeltKit's built-in account
 people sign up, create an organization, and invite members with a role.
 
 ```bash
-npm test                 # 34 tests, each on a fresh FeltDB instance
+npm test                 # 33 tests, each on a fresh FeltDB instance
 npm run test:artifact    # build the AppBoundry artifact and run the core workflows in it
+npm run test:appboundry  # run ledger.app with the published AppBoundry CLI, over HTTP
 npx tsc --noEmit         # typecheck
 npx feltkit build        # production build
 npm start                # run the production build
@@ -42,7 +43,7 @@ npm start                # run the production build
 | Activity | Review queue, proposals and decisions, audit trail |
 | Settings | Organization, members and roles, integrity check, notifications |
 
-Charts come from [Stack UI](https://github.com/rkendel1/stack-ui) 0.9.0, vendored unmodified in `vendor/stack-ui`
+Charts come from [Stack UI](https://github.com/rkendel1/stack-ui) 0.9.0 (npm)
 (checked by `tests/vendor.test.ts`).
 
 ## Documents
@@ -60,5 +61,6 @@ load test, recovery test or real-world trial has been done.
 
 Ledger runs on a FeltKit server and on AppBoundry with its organizations. The platform gaps Ledger
 found (organizations in artifacts, jobs, files, agent tasks, approvals) were fixed in FeltKit and
-AppBoundry, not worked around here; Ledger uses a vendored pre-release of FeltKit until those changes
-are published (`vendor/feltkit`, [MIGRATION.md](MIGRATION.md)).
+AppBoundry, not worked around here. AppBoundry 1.12.0 and Stack UI 0.9.0 are published and used from
+npm. The FeltKit changes are in rkendel1/feltkit#114, which is not merged; FeltKit 0.3.26 on npm does
+not contain them, so Ledger installs a build of that branch (`vendor/feltkit`, [MIGRATION.md](MIGRATION.md)).

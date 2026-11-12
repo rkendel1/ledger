@@ -1,11 +1,11 @@
 # Acceptance tests
 
-`npm test` runs 34 tests (`tests/*.test.ts`), each against a fresh FeltDB instance with a real
-organization whose members joined through real FeltKit invitations. Last run (2026-11-12, vendored
-FeltKit `66e4a11`): **34 passed, 0 failed**. `npm run test:artifact` builds the AppBoundry artifact and
+`npm test` runs 33 tests (`tests/*.test.ts`), each against a fresh FeltDB instance with a real
+organization whose members joined through real FeltKit invitations. Last run (2026-11-12, FeltKit build
+`91c4be4` of rkendel1/feltkit#114, Stack UI 0.9.0 and AppBoundry 1.12.0 from npm): **33 passed, 0 failed**. `npm run test:artifact` builds the AppBoundry artifact and
 runs Ledger's core workflows in two organizations inside it (1 test, passed).
-`scripts/appboundry-acceptance.mts` runs Ledger on AppBoundry's own host in production mode over HTTP:
-10 checks passed (`evidence/appboundry-acceptance.txt`).
+`npm run test:appboundry` runs `ledger.app` with the published `appboundry` CLI (`run`, `admin`) in production
+mode over HTTP: 11 checks passed (`evidence/appboundry-acceptance.txt`).
 Most scenarios end with `assertIntegrity`, which recomputes every ledger invariant from stored records.
 
 | Requirement | Test | Status |
@@ -48,13 +48,15 @@ Most scenarios end with `assertIntegrity`, which recomputes every ledger invaria
 | Deterministic rules, no duplicates, stale safety | m4 rules | Pass |
 | Review queue items | m4 queue | Pass |
 | Works with no AI service | Whole suite (no model configured) | Pass |
-| Rules run in the background, in the importer's organization; refused once they leave | m4 "background job" (fails on published FeltKit 0.3.25) | Pass |
+| Rules run in the background, in the importer's organization; refused once they leave | m4 "background job" (fails on published FeltKit 0.3.25 and 0.3.26) | Pass |
 | **Platform** | | |
 | Artifact builds and loads | tests-artifact | Pass |
-| Organizations on AppBoundry: create, provision, switch, isolation, removal | tests-artifact (reference host); scripts/appboundry-acceptance.mts (AppBoundry host, HTTP, production) | Pass |
+| Organizations on AppBoundry: create, provision (incl. `appboundry admin tenants provision`), switch, isolation, removal | tests-artifact (reference host); test:appboundry (AppBoundry 1.12.0 CLI, HTTP, production) | Pass |
+| Ledger's browser UI on AppBoundry | Not tested; by inspection it cannot sign in in production | **Open** |
 | Core workflows on AppBoundry: setup, invoice, payment, receipt, import, categorize, journal, reports, integrity | tests-artifact; appboundry-acceptance (invoice, payment, receipt, import + background scan, reports, integrity) | Pass |
 | Backend code portable to the artifact (no Buffer, no Web Crypto) | base64.test.ts; tests-artifact | Pass |
 | Vendored FeltKit is the recorded build | vendor.test.ts | Pass |
+| Ledger on published FeltKit 0.3.26 | Manual run (2026-11-12): typecheck fails (`sha256Hex`), Node tests fail from organization setup, artifact build fails | **Fails** (0.3.26 lacks #114) |
 
 ## Manual verification
 
