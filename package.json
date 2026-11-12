@@ -10,7 +10,8 @@
     "start": "feltkit start",
     "test": "feltkit test",
     "typecheck": "tsc --noEmit",
-    "codegen": "feltkit codegen"
+    "codegen": "feltkit codegen",
+    "test:artifact": "feltkit build --target appboundry && node --import tsx --test tests-artifact/*.test.ts"
   },
   "dependencies": {
     "@feltdb/feltkit": "0.3.25",

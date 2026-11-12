@@ -49,8 +49,8 @@ test("an agent reads and proposes, but cannot execute any financial action, even
     assert.equal(p.created, true);
     await rejectsWith(org.agent.mutation(api.review.approve, { id: p.id }), "FORBIDDEN");
 
-    // Misconfiguration: an agent added with the bookkeeper role. FeltKit's `approval: "required"`
-    // still refuses to let a non-person run a financial mutation directly.
+    // Misconfiguration: an agent added with the bookkeeper role. Ledger still refuses to let a
+    // non-person run a financial mutation directly.
     const ownerCtx = (await t.tenancy!.context(org.id, "ada"))!;
     await t.tenancy!.addPrincipal({ ...ownerCtx, principalId: "ada" }, { id: "rogue-bot", type: "agent" }, "bookkeeper");
     const rogue = t.as({ id: "rogue-bot", type: "agent", roles: [] }, { tenant: org.id });
@@ -58,9 +58,13 @@ test("an agent reads and proposes, but cannot execute any financial action, even
     await rejectsWith(rogue.mutation(api.banking.categorize, { bankTransactionId: gh.id, splits: [{ accountId: org.acct["6600"]!, amountMinor: 2100 }] }), "FORBIDDEN");
     await rejectsWith(rogue.mutation(api.invoices.issue, { id: "anything" }), "FORBIDDEN");
     await rejectsWith(rogue.mutation(api.review.approve, { id: p.id }), "FORBIDDEN");
-    const [denied] = await t.runtime.activity.list({ name: "banking:categorize", outcome: "denied" });
-    assert.equal(denied!.principal!.id, "rogue-bot");
-    assert.equal(denied!.authority!.reason, "approval required", "refused by FeltKit's approval rule, recorded as evidence");
+    // Refused by Ledger's own person-only rule (portable to AppBoundry, where FeltKit's approval flag is
+    // not enforced), and the refusal is in FeltKit's activity log as evidence.
+    const refused = (await t.runtime.activity.list({ name: "banking:categorize" })).find((e) => e.principal?.id === "rogue-bot");
+    assert.ok(refused);
+    assert.notEqual(refused!.outcome, "success");
+    assert.equal(refused!.error!.code, "FORBIDDEN");
+    assert.match(refused!.error!.message, /taken by people/);
     assert.equal((await org.reviewer.query(api.banking.transactions, { bankAccountId: gh.bankAccountId })).find((x) => x.id === gh.id)!.status, "unmatched", "nothing executed");
     assert.equal((await org.reviewer.query(api.journal.list, {})).length, 0);
   }));
@@ -128,6 +132,8 @@ test("rules: match recorded payments, repeat past categorizations, use vendor de
     assert.match(bySource["rules:history"]!.rationale, /categorized to 6600 Software/);
     assert.equal((bySource["rules:vendor"]!.input as any).splits[0].accountId, org.acct["6300"]);
     assert.equal((await org.agent.mutation(api.review.scan, {})).proposed, 0, "re-running proposes nothing new");
+    assert.equal(bySource["rules:match"]!.proposedBy, "ledger-rules");
+    assert.equal((bySource["rules:match"]!.evidence as any).triggeredByType, "agent", "who ran the rules is kept as evidence");
 
     // Someone categorizes the Staples charge by hand before the proposal is decided: approving the stale
     // proposal fails as a whole and writes nothing; it stays pending until someone rejects it.
@@ -136,7 +142,11 @@ test("rules: match recorded payments, repeat past categorizations, use vendor de
     const entriesBefore = (await org.reviewer.query(api.journal.list, {})).length;
     await rejectsWith(org.bookkeeper.mutation(api.review.approve, { id: bySource["rules:vendor"]!.id }), "FAILED_PRECONDITION");
     assert.equal((await org.reviewer.query(api.journal.list, {})).length, entriesBefore);
-    assert.equal((await org.reviewer.query(api.review.list, { status: "pending" })).length, 3);
+    assert.equal((await org.reviewer.query(api.review.list, { status: "pending" })).length, 2, "the hand-categorized transaction's proposal is no longer pending");
+    const superseded = (await org.reviewer.query(api.review.list, { status: "superseded" }))[0]!;
+    assert.deepEqual([superseded.id, superseded.decidedBy], [bySource["rules:vendor"]!.id, "grace"]);
+    // A person who runs the rules can approve what the rules propose (they are Ledger's proposals, not theirs).
+    await org.bookkeeper.mutation(api.review.scan, {});
 
     await org.bookkeeper.mutation(api.review.approve, { id: bySource["rules:match"]!.id });
     await org.bookkeeper.mutation(api.review.approve, { id: bySource["rules:history"]!.id });

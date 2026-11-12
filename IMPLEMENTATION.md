@@ -1,0 +1,69 @@
+# Implementation status
+
+What exists, how it was verified, and what does not exist yet. Platform findings are in GAP-REGISTER.md.
+
+## Milestones
+
+| Milestone | State | Notes |
+|---|---|---|
+| M0 Accounting foundation | Done | Organization, chart of accounts, drafts/posting/reversal, periods, opening balances, GL, integrity check, property and concurrency tests. |
+| M1 Core business accounting | Done | Customers, vendors, invoices (tax, credit notes, void), payments (idempotent, voidable), bills (approval), expenses, receipts (Files). |
+| M2 Banking | Done | CSV import, normalization, duplicate detection, match, split categorization, exclude, unmatch-by-reversal, reconciliation sessions. |
+| M3 Reporting | Done | P&L, balance sheet, cash flow, trial balance, GL, account history, AR/AP aging, overview, audit view. |
+| M4 Agentic bookkeeping | Done, deterministic | Proposals, approval with separation of duties, three rules, review queue, report-change explanation. No model. |
+| M5 Production readiness | **Partial** | Node build verified; AppBoundry artifact builds but cannot serve organizations (G-05). No deployment, load test, recovery test, external security audit, or Boundry trial. |
+
+## Layout
+
+```
+feltkit/app.ts            roles, tenancy, collections (the schema)
+feltkit/_ledger.ts        posting engine and accounting rules
+feltkit/_documents.ts     derived invoice/bill state and aging buckets
+feltkit/_csv.ts           statement parsing (pure)
+feltkit/_bank.ts, _contracts.ts   helpers
+feltkit/<module>.ts       functions: org, accounts, journal, contacts, invoices, payments, bills,
+                          expenses, banking, reconciliation, reports, overview, review, activity,
+                          integrity, inbox
+src/                      React UI (App shell, lib, pages/*)
+tests/                    feltkit test suites (m0–m4) and helpers
+tests-artifact/           AppBoundry artifact test
+```
+
+## Decisions worth knowing
+
+- **Ledger lines are the only posted truth.** Drafts keep lines on the header; they never reach
+  `ledgerLines`, so they cannot leak into reports.
+- **Control accounts.** Only invoice/credit-note/payment workflows post to Accounts Receivable, and only
+  bill/payment workflows to Accounts Payable. This keeps the subledgers equal to their documents
+  (checked by `integrity:check`).
+- **Derived, not stored:** invoice and bill payment status, balances, overdue.
+- **No `approval: "required"`.** It was used, then removed in favour of Ledger's own `requirePerson()`
+  because it is not enforced in AppBoundry artifacts and routes agents to non-tenant-aware proposals
+  (G-02, G-03).
+- **No Jobs.** Rules run synchronously because jobs lose the organization (G-01).
+- **Rule proposals belong to `ledger-rules`**, so the person who ran the rules may approve them.
+
+## Known limitations
+
+- Single currency per organization (G-13). No payroll, inventory, tax filing, consolidation.
+- No unapplied customer credit or prepayments: a payment must be fully applied to documents.
+- Bills have no tax lines of their own (enter tax as an expense line).
+- Payments made by credit card are recorded against the card account; card statements use the
+  "charges are positive" import option (inverts signs).
+- Reports scan all of an organization's ledger lines per request (G-12); not load-tested.
+- Report capability output contracts are loosely typed (G-11).
+- Receipts cannot be removed once attached (by design, evidence is preserved), and are limited to 10 MB.
+- The UI uses browser `prompt()`/`confirm()` for reasons on void/reverse/reject.
+- Studio, MCP and the AppPort HTTP surface were not exercised by Ledger's tests.
+- Browser receipt upload (`expenses:uploadLink` → `client.uploadFile` → `expenses:attach`) was not exercised; server-side upload (`expenses:upload`) is tested.
+
+## Verification commands
+
+```bash
+npm install
+npx tsc --noEmit                 # typecheck backend, UI and tests
+npm test                         # 28 tests against fresh FeltDB instances
+npx feltkit build                # Node build: bundle, schema contract, frontend, secret scan
+npm run test:artifact            # AppBoundry artifact build + test
+npm run dev                      # http://localhost:3000, sign in as a development user
+```

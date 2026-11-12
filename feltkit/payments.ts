@@ -10,7 +10,7 @@
  */
 import { fail, s, type MutationCtx } from "@feltdb/feltkit";
 import { accounts, allocations, app, audit, bankMatches, bills, contacts, invoices, ledgerLines, payments } from "./app.js";
-import { actor, postEntry, requireDate, requireSettings, reverseEntry, systemAccount } from "./_ledger.js";
+import { actor, postEntry, requireDate, requireSettings, reverseEntry, systemAccount, requirePerson } from "./_ledger.js";
 import { allocatedTo } from "./_documents.js";
 
 const MONEY_ACCOUNTS = new Set(["cash", "bank", "credit_card"]);
@@ -110,22 +110,26 @@ const paymentOut = s.object({ id: s.string(), journalEntryId: s.string(), replay
 
 export const receive = app.mutation({
   access: "payments.record",
-  approval: "required",
   args: { customerId: s.string(), ...common },
   returns: paymentOut,
   retry: { sequenceConflicts: 3 },
   capability: { name: "payments.receive", description: "Record a customer payment applied to invoices. People only; agents may propose." },
-  handler: (ctx, a) => record(ctx, { ...a, direction: "received", contactId: a.customerId }),
+  handler: (ctx, a) => {
+    requirePerson(ctx);
+    return record(ctx, { ...a, direction: "received", contactId: a.customerId });
+  },
 });
 
 export const pay = app.mutation({
   access: "payments.record",
-  approval: "required",
   args: { vendorId: s.string(), ...common },
   returns: paymentOut,
   retry: { sequenceConflicts: 3 },
   capability: { name: "payments.pay", description: "Record a payment to a vendor applied to bills. People only; agents may propose." },
-  handler: (ctx, a) => record(ctx, { ...a, direction: "made", contactId: a.vendorId }),
+  handler: (ctx, a) => {
+    requirePerson(ctx);
+    return record(ctx, { ...a, direction: "made", contactId: a.vendorId });
+  },
 });
 
 /**
@@ -135,10 +139,10 @@ export const pay = app.mutation({
  */
 export const voidPayment = app.mutation({
   access: "journal.reverse",
-  approval: "required",
   args: { id: s.string(), date: s.string(), reason: s.string({ minLength: 3, maxLength: 500 }) },
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const p = await ctx.db.get(payments, a.id);
     if (!p) fail("NOT_FOUND", "No such payment.");
     if (p.voidEntryId) fail("FAILED_PRECONDITION", "This payment is already void.");

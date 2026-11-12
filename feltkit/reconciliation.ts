@@ -14,7 +14,7 @@
  */
 import { fail, s, type MutationCtx, type QueryCtx } from "@feltdb/feltkit";
 import { app, audit, bankMatches, bankTransactions, journalEntries, ledgerLines, reconciliations } from "./app.js";
-import { actor, addDays, requireDate, requireSettings } from "./_ledger.js";
+import { actor, addDays, requireDate, requireSettings, requirePerson } from "./_ledger.js";
 import { requireBankAccount } from "./_bank.js";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -134,9 +134,9 @@ export const list = app.query({
 
 export const complete = app.mutation({
   access: "banking.reconcile",
-  approval: "required",
   args: { id: s.string() },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const w = await workspace(ctx, a.id);
     if (w.reconciliation.status !== "in_progress") fail("FAILED_PRECONDITION", "This reconciliation is already complete.");
     if (!w.canComplete) fail("FAILED_PRECONDITION", `Not reconciled yet: ${w.discrepancies.join(" ") || `difference ${w.differenceMinor}`}`);

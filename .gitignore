@@ -2,3 +2,4 @@ node_modules/
 .feltkit/
 dist/
 *.log
+*.app

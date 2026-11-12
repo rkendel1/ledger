@@ -8,8 +8,8 @@
  * never clear two transactions.
  */
 import { fail, s, type MutationCtx, type QueryCtx } from "@feltdb/feltkit";
-import { accounts, app, audit, bankAccounts, bankMatches, bankTransactions, expenses, journalEntries, ledgerLines, reconciliations, statementImports } from "./app.js";
-import { actor, addDays, daysBetween, entryLines, normalBalance, patchRemoving, postEntry, requireSettings, reverseEntry } from "./_ledger.js";
+import { accounts, app, audit, bankAccounts, proposals, bankMatches, bankTransactions, expenses, journalEntries, ledgerLines, reconciliations, statementImports } from "./app.js";
+import { actor, addDays, daysBetween, entryLines, normalBalance, patchRemoving, postEntry, requireSettings, reverseEntry, requirePerson } from "./_ledger.js";
 import { normalizePayee, parseStatement, sha256Hex } from "./_csv.js";
 import { requireBankAccount } from "./_bank.js";
 
@@ -200,7 +200,7 @@ export const candidates = app.query({
 });
 
 /** Record that `lineIds` explain the transaction. Used by match, categorize and approved proposals. */
-export async function applyMatch(ctx: MutationCtx, txnId: string, lineIds: string[]) {
+export async function applyMatch(ctx: MutationCtx, txnId: string, lineIds: string[], executingProposalId?: string) {
   const txn = await requireTxn(ctx, txnId);
   if (txn.status !== "unmatched") fail("FAILED_PRECONDITION", `This transaction is ${txn.status}.`);
   if (lineIds.length === 0 || new Set(lineIds).size !== lineIds.length) fail("INVALID_ARGUMENT", "Name each ledger line once.");
@@ -225,14 +225,21 @@ export async function applyMatch(ctx: MutationCtx, txnId: string, lineIds: strin
   }
   if (sum !== txn.amountMinor) fail("INVALID_ARGUMENT", `The lines total ${sum}; the bank transaction is ${txn.amountMinor}.`);
   await ctx.db.patch(bankTransactions, txn.id, { status: "matched", matchedLineIds: lineIds, matchedBy: actor(ctx) });
+  // Any other open proposal for this transaction is now moot: record that, rather than leave it pending.
+  for (const p of await ctx.db.find(proposals, { subjectKey: `bank:${txn.id}` })) {
+    if (p.status === "pending" && p.id !== executingProposalId) {
+      await ctx.db.patch(proposals, p.id, { status: "superseded", decidedBy: actor(ctx), decidedAt: Date.now(), decisionReason: "The transaction was explained directly." });
+      await audit.record(ctx, { subject: "proposal", id: p.id, type: "proposal.superseded", data: { bankTransactionId: txn.id } });
+    }
+  }
   return txn;
 }
 
 export const match = app.mutation({
   access: "banking.match",
-  approval: "required",
   args: { bankTransactionId: s.string(), ledgerLineIds: s.array(s.string(), { minItems: 1, maxItems: 50 }) },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const txn = await applyMatch(ctx, a.bankTransactionId, a.ledgerLineIds);
     await audit.record(ctx, { subject: "bank", id: txn.id, type: "banktxn.matched", data: { ledgerLineIds: a.ledgerLineIds, amountMinor: txn.amountMinor } });
     return { ok: true };
@@ -266,7 +273,7 @@ export async function applyCategorize(ctx: MutationCtx, txnId: string, splits: S
     ],
   });
   const bankLine = (await entryLines(ctx, entry.id)).find((l) => l.accountId === ba.accountId)!;
-  await applyMatch(ctx, txn.id, [bankLine.id]);
+  await applyMatch(ctx, txn.id, [bankLine.id], extra.proposalId);
   await ctx.db.patch(bankTransactions, txn.id, { journalEntryId: entry.id });
   await audit.record(ctx, { subject: "bank", id: txn.id, type: "banktxn.categorized", data: { journalEntryId: entry.id, splits: splits.map((x) => ({ accountId: x.accountId, amountMinor: x.amountMinor })), ...(extra.proposalId ? { proposalId: extra.proposalId } : {}) } });
   return { journalEntryId: entry.id, number: entry.number };
@@ -276,12 +283,14 @@ const splitArg = s.object({ accountId: s.string(), amountMinor: s.integer({ mini
 
 export const categorize = app.mutation({
   access: "banking.categorize",
-  approval: "required",
   args: { bankTransactionId: s.string(), splits: s.array(splitArg, { minItems: 1, maxItems: 20 }) },
   returns: s.object({ journalEntryId: s.string(), number: s.integer() }),
   retry: { sequenceConflicts: 3 },
   capability: { name: "banking.categorize", description: "Categorize (and optionally split) a bank transaction into a posted entry. People only; agents may propose." },
-  handler: (ctx, a) => applyCategorize(ctx, a.bankTransactionId, a.splits.map((x) => ({ accountId: x.accountId, amountMinor: x.amountMinor, ...(x.memo ? { memo: x.memo } : {}), ...(x.contactId ? { contactId: x.contactId } : {}) }))),
+  handler: (ctx, a) => {
+    requirePerson(ctx);
+    return applyCategorize(ctx, a.bankTransactionId, a.splits.map((x) => ({ accountId: x.accountId, amountMinor: x.amountMinor, ...(x.memo ? { memo: x.memo } : {}), ...(x.contactId ? { contactId: x.contactId } : {}) })));
+  },
 });
 
 /**
@@ -290,10 +299,10 @@ export const categorize = app.mutation({
  */
 export const unmatch = app.mutation({
   access: "banking.match",
-  approval: "required",
   args: { bankTransactionId: s.string(), reason: s.string({ minLength: 3, maxLength: 500 }) },
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const txn = await requireTxn(ctx, a.bankTransactionId);
     if (txn.status !== "matched") fail("FAILED_PRECONDITION", "This transaction is not matched.");
     if (txn.reconciliationId) {

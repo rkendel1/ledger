@@ -8,7 +8,7 @@
  */
 import { fail, s, type MutationCtx, type QueryCtx } from "@feltdb/feltkit";
 import { accounts, allocations, app, audit, bills, contacts, receipts } from "./app.js";
-import { actor, addDays, postEntry, requireDate, requireSettings, reverseEntry, systemAccount, today } from "./_ledger.js";
+import { actor, addDays, postEntry, requireDate, requireSettings, reverseEntry, systemAccount, today, requirePerson } from "./_ledger.js";
 import { allocatedByDocument, allocatedTo, billState } from "./_documents.js";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -87,9 +87,9 @@ export const update = app.mutation({
 
 export const approve = app.mutation({
   access: "bills.approve",
-  approval: "required",
   args: { id: s.string(), note: s.optional(s.string({ maxLength: 500 })) },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const bill = await ctx.db.get(bills, a.id);
     if (!bill) fail("NOT_FOUND", "No such bill.");
     if (bill.status !== "draft") fail("FAILED_PRECONDITION", `This bill is already ${bill.status}.`);
@@ -102,12 +102,12 @@ export const approve = app.mutation({
 
 export const post = app.mutation({
   access: "bills.post",
-  approval: "required",
   args: { id: s.string() },
   returns: s.object({ journalEntryId: s.string() }),
   retry: { sequenceConflicts: 3 },
   capability: { name: "bills.post", description: "Post an approved bill to accounts payable. People only; agents may propose." },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const bill = await ctx.db.get(bills, a.id);
     if (!bill) fail("NOT_FOUND", "No such bill.");
     if (bill.status === "draft") fail("FAILED_PRECONDITION", "This bill must be approved before it is posted.");
@@ -130,10 +130,10 @@ export const post = app.mutation({
 
 export const voidBill = app.mutation({
   access: "bills.approve",
-  approval: "required",
   args: { id: s.string(), date: s.string(), reason: s.string({ minLength: 3, maxLength: 500 }) },
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const bill = await ctx.db.get(bills, a.id);
     if (!bill) fail("NOT_FOUND", "No such bill.");
     if (bill.status === "draft" || bill.status === "approved") {

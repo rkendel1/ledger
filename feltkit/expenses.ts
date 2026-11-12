@@ -12,7 +12,7 @@
  */
 import { fail, s, type MutationCtx, type QueryCtx } from "@feltdb/feltkit";
 import { accounts, app, audit, bills, contacts, expenses, receipts } from "./app.js";
-import { actor, postEntry, requireDate, requireSettings } from "./_ledger.js";
+import { actor, postEntry, requireDate, requireSettings, requirePerson } from "./_ledger.js";
 
 type Ctx = QueryCtx | MutationCtx;
 const PAID_FROM = new Set(["cash", "bank", "credit_card"]);
@@ -80,12 +80,12 @@ export const update = app.mutation({
 
 export const approve = app.mutation({
   access: "expenses.approve",
-  approval: "required",
   args: { id: s.string(), note: s.optional(s.string({ maxLength: 500 })) },
   returns: s.object({ journalEntryId: s.string() }),
   retry: { sequenceConflicts: 3 },
   capability: { name: "expenses.approve", description: "Approve an expense and post it. People only; agents may propose." },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const e = await ctx.db.get(expenses, a.id);
     if (!e) fail("NOT_FOUND", "No such expense.");
     if (e.status !== "draft") fail("FAILED_PRECONDITION", `This expense is already ${e.status}.`);
@@ -108,9 +108,9 @@ export const approve = app.mutation({
 
 export const reject = app.mutation({
   access: "expenses.approve",
-  approval: "required",
   args: { id: s.string(), note: s.string({ minLength: 3, maxLength: 500 }) },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const e = await ctx.db.get(expenses, a.id);
     if (!e) fail("NOT_FOUND", "No such expense.");
     if (e.status !== "draft") fail("FAILED_PRECONDITION", `This expense is already ${e.status}.`);

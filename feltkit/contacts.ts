@@ -21,7 +21,7 @@ export const list = app.query({
     await requireSettings(ctx);
     return (await ctx.db.find(contacts, a.kind ? { kind: a.kind } : {}))
       .filter((c) => a.includeInactive || c.active)
-      .sort((x, y) => x.name.localeCompare(y.name));
+      .sort((x, y) => (x.name.toLowerCase() < y.name.toLowerCase() ? -1 : x.name.toLowerCase() > y.name.toLowerCase() ? 1 : 0));
   },
 });
 

@@ -12,7 +12,7 @@
  */
 import { fail, s, type MutationCtx, type QueryCtx } from "@feltdb/feltkit";
 import { PROPOSAL_ACTIONS, accounts, app, audit, bankAccounts, bankTransactions, bills, contacts, expenses, journalEntries, ledgerLines, proposals, receipts, reconciliations, type ProposalAction } from "./app.js";
-import { daysBetween, postEntry, requireActiveAccounts, requireControlAccountsByWorkflow, requireDate, requireSettings, today, validateLines } from "./_ledger.js";
+import { daysBetween, postEntry, requireActiveAccounts, requireControlAccountsByWorkflow, requireDate, requireSettings, today, validateLines, requirePerson } from "./_ledger.js";
 import { openBills, openInvoices } from "./_documents.js";
 import { applyCategorize, applyMatch, candidateLines } from "./banking.js";
 import { reportList } from "./_contracts.js";
@@ -72,14 +72,19 @@ async function check(ctx: Ctx, action: ProposalAction, input: Record<string, unk
   return `journal:${j.date}:${j.description.trim().toLowerCase()}:${j.lines.reduce((t, l) => t + l.debit, 0)}`;
 }
 
+/** Rule proposals are Ledger's, not the person who ran the rules: that person may still approve them. */
+export const RULES_PRINCIPAL = "ledger-rules";
+
 async function insertProposal(ctx: MutationCtx, p: { action: ProposalAction; input: Record<string, unknown>; summary: string; rationale: string; evidence: Record<string, unknown>; source: string }) {
   const subjectKey = await check(ctx, p.action, p.input);
   const [open] = (await ctx.db.find(proposals, { subjectKey })).filter((x) => x.status === "pending");
   if (open) return { id: open.id, created: false };
   const principal = ctx.auth.requirePrincipal();
+  const byRules = p.source.startsWith("rules:");
   const id = await ctx.db.insert(proposals, {
-    action: p.action, input: p.input, summary: p.summary.slice(0, 300), rationale: p.rationale.slice(0, 2000), evidence: p.evidence,
-    source: p.source, proposedBy: principal.id, proposedByType: principal.type, subjectKey, status: "pending", createdAt: Date.now(),
+    action: p.action, input: p.input, summary: p.summary.slice(0, 300), rationale: p.rationale.slice(0, 2000),
+    evidence: byRules ? { ...p.evidence, triggeredBy: principal.id, triggeredByType: principal.type } : p.evidence,
+    source: p.source, proposedBy: byRules ? RULES_PRINCIPAL : principal.id, proposedByType: byRules ? "rules" : principal.type, subjectKey, status: "pending", createdAt: Date.now(),
   });
   await audit.record(ctx, { subject: "proposal", id, type: "proposal.created", data: { action: p.action, source: p.source, summary: p.summary, agent: principal.type === "agent" } });
   return { id, created: true };
@@ -116,7 +121,7 @@ async function execute(ctx: MutationCtx, p: { id: string; action: ProposalAction
   }
   if (p.action === "bank.match") {
     const i = p.input as unknown as Match;
-    const txn = await applyMatch(ctx, i.bankTransactionId, i.ledgerLineIds);
+    const txn = await applyMatch(ctx, i.bankTransactionId, i.ledgerLineIds, p.id);
     await audit.record(ctx, { subject: "bank", id: txn.id, type: "banktxn.matched", data: { ledgerLineIds: i.ledgerLineIds, proposalId: p.id } });
     return { bankTransactionId: txn.id, ledgerLineIds: i.ledgerLineIds };
   }
@@ -135,10 +140,10 @@ async function execute(ctx: MutationCtx, p: { id: string; action: ProposalAction
  */
 export const approve = app.mutation({
   access: "proposals.decide",
-  approval: "required",
   args: { id: s.string(), reason: s.optional(s.string({ maxLength: 500 })) },
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const p = await ctx.db.get(proposals, a.id);
     if (!p) fail("NOT_FOUND", "No such proposal.");
     if (p.status !== "pending") fail("FAILED_PRECONDITION", `This proposal is already ${p.status}.`);

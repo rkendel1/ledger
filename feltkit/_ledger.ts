@@ -98,6 +98,17 @@ export function requireOpenPeriod(closedThrough: string, date: string) {
   }
 }
 
+/**
+ * Financial actions are taken by people. FeltKit's `approval: "required"` already refuses agents and
+ * services on FeltKit's runtime, but an AppBoundry artifact does not enforce it, so Ledger checks the
+ * caller itself, the same way on every runtime. Agents propose (review:propose); a person approves.
+ */
+export function requirePerson(ctx: QueryCtx | MutationCtx) {
+  const p = ctx.auth.requirePrincipal();
+  if (p.type !== "user") fail("FORBIDDEN", "Financial actions are taken by people. Propose it instead (proposals.create), and a person can approve it.");
+  return p;
+}
+
 export function actor(ctx: QueryCtx | MutationCtx): string {
   return ctx.auth.requirePrincipal().id;
 }
@@ -151,6 +162,7 @@ export async function systemAccount(ctx: QueryCtx | MutationCtx, subtype: "recei
  */
 export async function postEntry(ctx: MutationCtx, input: PostInput) {
   const tenant = app.requireTenant(ctx);
+  requirePerson(ctx);
   const who = actor(ctx);
   requireDate(input.date);
   const description = input.description.trim();

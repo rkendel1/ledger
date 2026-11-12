@@ -3,7 +3,7 @@
  */
 import { fail, s } from "@feltdb/feltkit";
 import { accounts, app, audit, journalEntries, ledgerLines } from "./app.js";
-import { actor, entryLines, postEntry, requireActiveAccounts, requireControlAccountsByWorkflow, requireDate, requireSettings, reverseEntry, validateLines } from "./_ledger.js";
+import { actor, entryLines, postEntry, requireActiveAccounts, requireControlAccountsByWorkflow, requireDate, requireSettings, reverseEntry, validateLines, requirePerson } from "./_ledger.js";
 
 const lineArg = s.object({
   accountId: s.string(),
@@ -69,12 +69,12 @@ export const deleteDraft = app.mutation({
 /** Post a draft: it gets its number and its lines reach the ledger. */
 export const post = app.mutation({
   access: "journal.post",
-  approval: "required",
   args: { id: s.string() },
   returns: s.object({ id: s.string(), number: s.integer() }),
   retry: { sequenceConflicts: 3 },
   capability: { name: "journal.post", description: "Post a draft journal entry to the ledger. People only; agents may propose." },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const draft = await ctx.db.get(journalEntries, a.id);
     if (!draft) fail("NOT_FOUND", "No such journal entry.");
     if (draft.status !== "draft") fail("FAILED_PRECONDITION", `Journal entry ${draft.number} is already posted.`);
@@ -91,11 +91,11 @@ export const post = app.mutation({
 /** Create and post in one step (with an optional idempotency key, so a retried request posts once). */
 export const createAndPost = app.mutation({
   access: "journal.post",
-  approval: "required",
   args: { date: s.string(), description: s.string({ minLength: 1, maxLength: 300 }), reference: s.optional(s.string({ maxLength: 120 })), lines: s.array(lineArg, { minItems: 2 }), idempotencyKey: s.optional(s.string({ minLength: 8, maxLength: 120 })) },
   returns: s.object({ id: s.string(), number: s.integer(), replayed: s.boolean() }),
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     if (a.idempotencyKey) {
       const [prior] = await ctx.db.find(journalEntries, { idempotencyKey: a.idempotencyKey });
       if (prior) return { id: prior.id, number: prior.number, replayed: true };
@@ -112,11 +112,11 @@ export const createAndPost = app.mutation({
 /** Reverse a posted entry with an explicit new entry. The original stays exactly as it was. */
 export const reverse = app.mutation({
   access: "journal.reverse",
-  approval: "required",
   args: { id: s.string(), date: s.string(), reason: s.string({ minLength: 3, maxLength: 500 }) },
   returns: s.object({ id: s.string(), number: s.integer() }),
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const original = await ctx.db.get(journalEntries, a.id);
     if (original && !["manual", "opening_balance", "proposal", "reversal"].includes(original.sourceType)) {
       fail("FAILED_PRECONDITION", `Entry ${original.number} was posted by a ${original.sourceType.replace("_", " ")}. Correct it from that document (void, credit note, or unmatch) so the document and the ledger stay in step.`);

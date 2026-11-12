@@ -3,7 +3,7 @@
  */
 import { fail, s } from "@feltdb/feltkit";
 import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, accounts, app, audit, ledgerLines, type AccountSubtype, type AccountType } from "./app.js";
-import { normalBalance, patchRemoving, postEntry, requireDate, requireSettings, systemAccount } from "./_ledger.js";
+import { normalBalance, patchRemoving, postEntry, requireDate, requireSettings, systemAccount, requirePerson } from "./_ledger.js";
 
 /** Which subtypes belong to which type. */
 export const SUBTYPES_BY_TYPE: Record<AccountType, AccountSubtype[]> = {
@@ -148,7 +148,6 @@ export const update = app.mutation({
  */
 export const setOpeningBalances = app.mutation({
   access: "journal.post",
-  approval: "required",
   args: {
     date: s.string(),
     balances: s.array(s.object({ accountId: s.string(), balanceMinor: s.integer() }), { minItems: 1 }),
@@ -156,6 +155,7 @@ export const setOpeningBalances = app.mutation({
   },
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     requireDate(a.date);
     const equity = await systemAccount(ctx, "opening_balance");
     const lines: { accountId: string; debit: number; credit: number; memo: string }[] = [];

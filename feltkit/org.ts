@@ -3,7 +3,7 @@
  */
 import { fail, s } from "@feltdb/feltkit";
 import { accounts, app, audit, journalEntries, orgSettings, periodEvents, taxRates, type AccountSubtype, type AccountType } from "./app.js";
-import { actor, requireDate, requireSettings } from "./_ledger.js";
+import { actor, requireDate, requireSettings, requirePerson } from "./_ledger.js";
 
 type Seed = [number: string, name: string, type: AccountType, subtype: AccountSubtype, system?: boolean];
 
@@ -140,11 +140,11 @@ export const update = app.mutation({
  */
 export const closePeriod = app.mutation({
   access: "periods.close",
-  approval: "required",
   args: { through: s.string(), reason: s.optional(s.string({ maxLength: 500 })) },
   returns: s.object({ closedThrough: s.string() }),
   capability: { name: "periods.close", description: "Close the books through a date. People only; agents may propose." },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const through = requireDate(a.through, "through");
     const current = await requireSettings(ctx);
     if (current.closedThrough && through <= current.closedThrough) fail("FAILED_PRECONDITION", `The books are already closed through ${current.closedThrough}. To move the boundary back, reopen.`);
@@ -161,9 +161,9 @@ export const closePeriod = app.mutation({
 /** Move the closed boundary back. Requires a reason; the history keeps every close and reopen. */
 export const reopenPeriod = app.mutation({
   access: "periods.reopen",
-  approval: "required",
   args: { to: s.string(), reason: s.string({ minLength: 3, maxLength: 500 }) },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const to = a.to === "" ? "" : requireDate(a.to, "to");
     const current = await requireSettings(ctx);
     if (!current.closedThrough) fail("FAILED_PRECONDITION", "No period is closed.");

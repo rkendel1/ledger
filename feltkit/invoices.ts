@@ -9,7 +9,7 @@
  */
 import { fail, s, type MutationCtx, type QueryCtx } from "@feltdb/feltkit";
 import { accounts, allocations, app, audit, contacts, creditNotes, invoices, taxRates } from "./app.js";
-import { actor, addDays, postEntry, requireDate, requireSettings, reverseEntry, systemAccount, today, type LineInput } from "./_ledger.js";
+import { actor, addDays, postEntry, requireDate, requireSettings, reverseEntry, systemAccount, today, type LineInput, requirePerson } from "./_ledger.js";
 import { allocatedByDocument, allocatedTo, invoiceState } from "./_documents.js";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -130,12 +130,12 @@ async function issueLines(ctx: Ctx, inv: { customerId: string; lines: Array<{ ac
 
 export const issue = app.mutation({
   access: "invoices.issue",
-  approval: "required",
   args: { id: s.string() },
   returns: s.object({ id: s.string(), number: s.string(), journalEntryId: s.string() }),
   retry: { sequenceConflicts: 3 },
   capability: { name: "invoices.issue", description: "Issue a draft invoice: number it and post it to receivables. People only; agents may propose." },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const tenant = app.requireTenant(ctx);
     const inv = await ctx.db.get(invoices, a.id);
     if (!inv) fail("NOT_FOUND", "No such invoice.");
@@ -158,10 +158,10 @@ export const issue = app.mutation({
 
 export const voidInvoice = app.mutation({
   access: "invoices.void",
-  approval: "required",
   args: { id: s.string(), date: s.string(), reason: s.string({ minLength: 3, maxLength: 500 }) },
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const inv = await ctx.db.get(invoices, a.id);
     if (!inv) fail("NOT_FOUND", "No such invoice.");
     if (inv.status !== "issued") fail("FAILED_PRECONDITION", `Only an issued invoice can be voided (this one is ${inv.status}).`);
@@ -179,7 +179,6 @@ export const voidInvoice = app.mutation({
  */
 export const creditNote = app.mutation({
   access: "invoices.issue",
-  approval: "required",
   args: {
     invoiceId: s.string(),
     date: s.string(),
@@ -188,6 +187,7 @@ export const creditNote = app.mutation({
   },
   retry: { sequenceConflicts: 3 },
   handler: async (ctx, a) => {
+    requirePerson(ctx);
     const tenant = app.requireTenant(ctx);
     const inv = await ctx.db.get(invoices, a.invoiceId);
     if (!inv) fail("NOT_FOUND", "No such invoice.");
@@ -243,7 +243,7 @@ export const list = app.query({
     const names = new Map((await ctx.db.find(contacts, { kind: "customer" })).map((c) => [c.id, c.name]));
     return (await ctx.db.find(invoices, a.customerId ? { customerId: a.customerId } : {}))
       .map((i) => ({ ...i, customerName: names.get(i.customerId) ?? "?", ...invoiceState(i, alloc.get(i.id), asOf) }))
-      .sort((x, y) => (x.issueDate === y.issueDate ? (y.number ?? "").localeCompare(x.number ?? "") : x.issueDate < y.issueDate ? 1 : -1));
+      .sort((x, y) => (x.issueDate === y.issueDate ? ((y.number ?? "") < (x.number ?? "") ? -1 : (y.number ?? "") > (x.number ?? "") ? 1 : 0) : x.issueDate < y.issueDate ? 1 : -1));
   },
 });
 
