@@ -9,6 +9,7 @@
  * DD/MM/YYYY when `dateFormat: "dmy"`.
  */
 
+import { sha256Hex as feltkitSha256Hex } from "@feltdb/feltkit";
 export interface ParsedRow {
   row: number;
   date: string;
@@ -169,7 +170,7 @@ export function normalizePayee(description: string): string {
     .join(" ") || description.toLowerCase().trim();
 }
 
+/** SHA-256 of the statement text (FeltKit's, which runs the same on Node and in an AppBoundry artifact; Web Crypto does not exist in the latter). */
 export async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return feltkitSha256Hex(text);
 }

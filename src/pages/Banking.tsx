@@ -77,7 +77,6 @@ function BankAccount({ account }: { account: Account }) {
 
 function ImportButton({ account }: { account: Account }) {
   const importStatement = useMutation(api.banking.importStatement);
-  const scan = useMutation(api.review.scan);
   const { run, busy } = useRun();
   const toast = useToast();
   const [invert, setInvert] = useState(account.ledgerType === "liability");
@@ -92,8 +91,8 @@ function ImportButton({ account }: { account: Account }) {
           const csv = await file.text();
           const r = await run(() => importStatement({ bankAccountId: account.id, fileName: file.name, csv, invertSigns: invert }));
           if (r) {
-            toast("ok", r.replayed ? "This file was already imported." : `Imported ${r.imported}. ${r.duplicates} duplicate${r.duplicates === 1 ? "" : "s"} skipped and ${r.rejected} row${r.rejected === 1 ? "" : "s"} rejected — both are listed under Imports.`);
-            await run(() => scan({}));
+            // Suggestions for the new lines are made by a background job (review.scan) and appear as it finishes.
+            toast("ok", r.replayed ? "This file was already imported." : `Imported ${r.imported}. ${r.duplicates} duplicate${r.duplicates === 1 ? "" : "s"} skipped and ${r.rejected} row${r.rejected === 1 ? "" : "s"} rejected — both are listed under Imports. Suggestions follow shortly.`);
           }
         }} />
       </label>

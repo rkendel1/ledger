@@ -9,7 +9,7 @@
  */
 import { fail, s, type MutationCtx, type QueryCtx } from "@feltdb/feltkit";
 import { accounts, app, audit, bankAccounts, proposals, bankMatches, bankTransactions, expenses, journalEntries, ledgerLines, reconciliations, statementImports } from "./app.js";
-import { actor, addDays, daysBetween, entryLines, normalBalance, patchRemoving, postEntry, requireSettings, reverseEntry, requirePerson } from "./_ledger.js";
+import { actor, addDays, daysBetween, entryLines, normalBalance, postEntry, requireSettings, reverseEntry, requirePerson } from "./_ledger.js";
 import { normalizePayee, parseStatement, sha256Hex } from "./_csv.js";
 import { requireBankAccount } from "./_bank.js";
 
@@ -101,7 +101,7 @@ export const importStatement = app.mutation({
       fail("INVALID_ARGUMENT", (e as Error).message);
     }
     if (parsed.rows.length === 0 && parsed.rejected.length === 0) fail("INVALID_ARGUMENT", "The statement has no rows.");
-    const file = await ctx.services.files.upload({ name: a.fileName, contentType: "text/csv", content: a.csv, metadata: { ledgerTenant: tenant.id, kind: "statement", bankAccountId: ba.id } });
+    const file = await ctx.services.files.upload({ name: a.fileName, contentType: "text/csv", content: a.csv, metadata: { kind: "statement", bankAccountId: ba.id } });
     const importId = await ctx.db.insert(statementImports, {
       bankAccountId: ba.id, fileId: file.id, fileName: a.fileName, sha256, rowCount: parsed.rows.length + parsed.rejected.length,
       importedCount: 0, duplicates: [], rejected: parsed.rejected, periodStart: "", periodEnd: "", importedBy: actor(ctx), at: Date.now(),
@@ -130,6 +130,8 @@ export const importStatement = app.mutation({
     }
     await ctx.db.patch(statementImports, importId, { importedCount: imported, duplicates, periodStart: start, periodEnd: end });
     await audit.record(ctx, { subject: "bank", id: importId, type: "statement.imported", data: { bankAccountId: ba.id, fileName: a.fileName, sha256, fileId: file.id, imported, duplicates: duplicates.length, rejected: parsed.rejected.length, periodStart: start, periodEnd: end } });
+    // The bookkeeping rules run in the background once this commits (review:scanJob), in this organization.
+    if (imported > 0) ctx.afterCommit.jobs.enqueue("review.scan", {});
     return { importId, replayed: false, imported, duplicates: duplicates.length, rejected: parsed.rejected.length };
   },
 });
@@ -316,7 +318,8 @@ export const unmatch = app.mutation({
       const date = settings.closedThrough && txn.date <= settings.closedThrough ? addDays(settings.closedThrough, 1) : txn.date;
       reversalId = (await reverseEntry(ctx, txn.journalEntryId, { date, reason: `Uncategorized bank transaction: ${a.reason}`, sourceType: "bank", sourceId: txn.id })).id;
     }
-    await patchRemoving(ctx, bankTransactions, txn.id, { status: "unmatched", matchedLineIds: [] }, ["journalEntryId", "matchedBy"]);
+    // A field patched to undefined is removed (FeltKit, on every runtime).
+    await ctx.db.patch(bankTransactions, txn.id, { status: "unmatched", matchedLineIds: [], journalEntryId: undefined, matchedBy: undefined });
     await audit.record(ctx, { subject: "bank", id: txn.id, type: "banktxn.unmatched", data: { reason: a.reason, ...(reversalId ? { reversalEntryId: reversalId } : {}) } });
     return { ok: true, reversalEntryId: reversalId ?? null };
   },
@@ -342,7 +345,7 @@ export const include = app.mutation({
     const txn = await requireTxn(ctx, a.bankTransactionId);
     if (txn.status !== "excluded") fail("FAILED_PRECONDITION", "This transaction is not excluded.");
     if (txn.reconciliationId) fail("FAILED_PRECONDITION", "This transaction is part of a completed reconciliation.");
-    await patchRemoving(ctx, bankTransactions, txn.id, { status: "unmatched" }, ["excludedReason"]);
+    await ctx.db.patch(bankTransactions, txn.id, { status: "unmatched", excludedReason: undefined });
     await audit.record(ctx, { subject: "bank", id: txn.id, type: "banktxn.included", data: {} });
     return { ok: true };
   },

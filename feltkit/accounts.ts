@@ -3,7 +3,7 @@
  */
 import { fail, s } from "@feltdb/feltkit";
 import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, accounts, app, audit, ledgerLines, type AccountSubtype, type AccountType } from "./app.js";
-import { normalBalance, patchRemoving, postEntry, requireDate, requireSettings, systemAccount, requirePerson } from "./_ledger.js";
+import { normalBalance, postEntry, requireDate, requireSettings, systemAccount, requirePerson } from "./_ledger.js";
 
 /** Which subtypes belong to which type. */
 export const SUBTYPES_BY_TYPE: Record<AccountType, AccountSubtype[]> = {
@@ -135,7 +135,7 @@ export const update = app.mutation({
       ...(a.description !== undefined ? { description: a.description } : {}),
       ...(a.active !== undefined ? { active: a.active } : {}),
     };
-    if (a.parentId === null) await patchRemoving(ctx, accounts, a.id, patch, ["parentId"]);
+    if (a.parentId === null) await ctx.db.patch(accounts, a.id, { ...patch, parentId: undefined });
     else await ctx.db.patch(accounts, a.id, patch as never);
     await audit.record(ctx, { subject: "account", id: a.id, type: "account.updated", data: { before: { number: account.number, name: account.name, subtype: account.subtype, active: account.active }, changes: { ...patch, ...(a.parentId === null ? { parentId: null } : {}) } } });
     return { ok: true };

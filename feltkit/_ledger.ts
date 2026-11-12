@@ -276,15 +276,3 @@ export function normalBalance(type: string, debit: number, credit: number): numb
   return isDebitNormal(type) ? debit - credit : credit - debit;
 }
 
-/**
- * Patch a record and remove fields. `patch` cannot remove a field (an `undefined` value is not
- * stored), so the record is replaced without them. Its version is still checked at commit.
- */
-export async function patchRemoving<C extends Parameters<MutationCtx["db"]["get"]>[0]>(ctx: MutationCtx, collection: C, id: string, patch: Record<string, unknown>, remove: string[]) {
-  const current = (await ctx.db.get(collection, id)) as Record<string, unknown> | null;
-  if (!current) fail("NOT_FOUND", "No such record.");
-  const { id: _id, __version: _v, ...rest } = current;
-  const next: Record<string, unknown> = { ...rest, ...patch };
-  for (const f of remove) delete next[f];
-  return ctx.db.replace(collection, id, next as never);
-}

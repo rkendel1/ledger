@@ -155,6 +155,36 @@ test("rules: match recorded payments, repeat past categorizations, use vendor de
     await assertIntegrity(org);
   }));
 
+test("after an import, the rules run as a background job in that organization, as the importer; refused once they are removed", () =>
+  withApp(async (t) => {
+    // Platform behaviour this relies on (FeltKit G-01): a job carries its organization and the
+    // importer's live membership. Before it, the scan had to run synchronously from the browser.
+    const a = await newOrg(t, "Acme");
+    const b = await newOrg(t, "Globex", { owner: "gus", admin: "gia", accountant: "gil", bookkeeper: "gwen", reviewer: "gabe" });
+    // A vendor default in each organization, so the rules have something to propose for STAPLES.
+    for (const org of [a, b]) await org.bookkeeper.mutation(api.contacts.create, { kind: "vendor", name: "Staples", defaultAccountId: org.acct["6300"]! });
+    await setup(a);
+    const bBank = await b.accountant.mutation(api.banking.createAccount, { name: "Checking", accountId: b.acct["1010"]! });
+    assert.equal((await a.reviewer.query(api.review.list, { status: "pending" })).length, 0, "nothing proposed during the import itself");
+    const tick = await t.runtime.runServices();
+    assert.deepEqual([tick.jobs, tick.failed.jobs], [1, 0]);
+    const proposedA = await a.reviewer.query(api.review.list, { status: "pending" });
+    assert.deepEqual(proposedA.map((p) => p.source), ["rules:vendor"], "the job proposed in Acme");
+    const run = (await t.runtime.activity.list({ name: "review:scanJob" })).find((e) => e.outcome === "success");
+    assert.equal(run?.principal?.id, "grace", "run as the importer");
+    assert.equal((await b.reviewer.query(api.review.list, { status: "pending" })).length, 0, "and nothing in Globex");
+
+    // Globex's bookkeeper imports, then leaves before the job runs: the job is refused, nothing proposed.
+    await b.bookkeeper.mutation(api.banking.importStatement, { bankAccountId: bBank, fileName: "g.csv", csv: CSV });
+    const ownerB = { ...(await t.tenancy!.context(b.id, "gus"))!, principalId: "gus" };
+    await t.tenancy!.remove(ownerB, "gwen");
+    const later = await t.runtime.runServices();
+    assert.deepEqual([later.jobs, later.failed.jobs], [1, 1]);
+    assert.equal((await b.reviewer.query(api.review.list, { status: "pending" })).length, 0);
+    await assertIntegrity(a);
+    await assertIntegrity(b);
+  }));
+
 test("the review queue surfaces duplicates, missing receipts, unusual amounts, approvals and overdue documents", () =>
   withApp(async (t) => {
     const org = await newOrg(t);

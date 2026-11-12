@@ -217,7 +217,21 @@ export const scan = app.mutation({
   access: "proposals.create",
   returns: s.object({ examined: s.integer(), proposed: s.integer() }),
   capability: { name: "review.scan", description: "Run Ledger's deterministic bookkeeping rules and create proposals for review." },
-  handler: async (ctx) => {
+  handler: (ctx) => runScan(ctx),
+});
+
+/**
+ * The same scan as a background job: queued by importStatement after its commit, run by FeltKit as
+ * the importer in the organization it was queued in (a member removed meanwhile: refused).
+ */
+export const scanJob = app.mutation({
+  access: "proposals.create",
+  returns: s.object({ examined: s.integer(), proposed: s.integer() }),
+  handler: (ctx) => runScan(ctx),
+});
+
+async function runScan(ctx: MutationCtx): Promise<{ examined: number; proposed: number }> {
+  {
     await requireSettings(ctx);
     const history = await payeeHistory(ctx);
     const vendors = (await ctx.db.find(contacts, { kind: "vendor" })).filter((v) => v.defaultAccountId && v.active);
@@ -272,8 +286,8 @@ export const scan = app.mutation({
       }
     }
     return { examined, proposed };
-  },
-});
+  }
+}
 
 // ── The review queue ───────────────────────────────────────────────────────────────────────
 

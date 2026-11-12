@@ -29,6 +29,9 @@ const BOOKKEEPING = [
   "bills.write", "bills.post", "expenses.write", "banking.import", "banking.categorize",
   "banking.match", "journal.draft", "proposals.create", "proposals.decide", "files.write",
   "notifications.send",
+  // The review scan after an import runs as a background job, as its importer, in their organization
+  // (FeltKit records the organization with the job and checks the membership again when it runs).
+  "jobs.create", "jobs.execute",
 ];
 
 /** An accountant: everything financial, including posting, reversing, approving and closing periods. */
@@ -74,6 +77,8 @@ export const app = feltkit({
     files: true,
     // In-app notices to approvers (bills awaiting approval, expenses to review). Read from the inbox.
     notifications: { types: ["bill.awaiting_approval", "expense.submitted"] },
+    // review.scan: the bookkeeping rules over newly imported bank lines (feltkit/review.ts).
+    jobs: { handlers: { "review.scan": "review:scanJob" } },
   },
 });
 

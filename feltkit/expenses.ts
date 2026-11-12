@@ -13,6 +13,7 @@
 import { fail, s, type MutationCtx, type QueryCtx } from "@feltdb/feltkit";
 import { accounts, app, audit, bills, contacts, expenses, receipts } from "./app.js";
 import { actor, postEntry, requireDate, requireSettings, requirePerson } from "./_ledger.js";
+import { fromBase64, toBase64 } from "./_base64.js";
 
 type Ctx = QueryCtx | MutationCtx;
 const PAID_FROM = new Set(["cash", "bank", "credit_card"]);
@@ -161,32 +162,36 @@ async function requireSubject(ctx: Ctx, subjectType: "expense" | "bill", subject
 
 const subjectArgs = { subjectType: s.enum(["expense", "bill"] as const), subjectId: s.string() };
 
-/** A single-use upload link (browser → PUT). The organization and subject are fixed in the file's metadata. */
+/**
+ * A single-use upload link (browser → PUT). The subject is fixed in the file's metadata; FeltKit fixes the
+ * organization (a file belongs to the organization it was uploaded in, and is NOT_FOUND from any other).
+ */
 export const uploadLink = app.mutation({
   access: "expenses.write",
   args: { ...subjectArgs, name: s.string({ minLength: 1, maxLength: 200 }), contentType: s.optional(s.string({ maxLength: 100 })) },
   handler: async (ctx, a) => {
-    const tenant = app.requireTenant(ctx);
+    app.requireTenant(ctx);
     await requireSubject(ctx, a.subjectType, a.subjectId);
     return ctx.services.files.uploadLink({
       name: a.name, ...(a.contentType ? { contentType: a.contentType } : {}), maxBytes: MAX_RECEIPT_BYTES,
-      metadata: { ledgerTenant: tenant.id, subjectType: a.subjectType, subjectId: a.subjectId },
+      metadata: { subjectType: a.subjectType, subjectId: a.subjectId },
     });
   },
 });
 
 async function bind(ctx: MutationCtx, fileId: string) {
-  const tenant = app.requireTenant(ctx);
+  app.requireTenant(ctx);
   const who = actor(ctx);
   let file;
   try {
+    // Another organization's file is NOT_FOUND here: FeltKit scopes Files to the caller's organization.
     file = await ctx.services.files.get(fileId);
   } catch {
     fail("NOT_FOUND", "No such file.");
   }
-  // Deny every mismatch with the same answer, so a refusal reveals nothing about other organizations' files.
+  // Only your own upload is bound (same answer as a missing file, so nothing is revealed).
   const meta = file.metadata as Record<string, unknown>;
-  if (meta.ledgerTenant !== tenant.id || file.owner !== who) fail("NOT_FOUND", "No such file.");
+  if (file.owner !== who) fail("NOT_FOUND", "No such file.");
   const subjectType = meta.subjectType as "expense" | "bill";
   const subjectId = String(meta.subjectId);
   await requireSubject(ctx, subjectType, subjectId);
@@ -213,13 +218,13 @@ export const upload = app.mutation({
   access: "expenses.write",
   args: { ...subjectArgs, name: s.string({ minLength: 1, maxLength: 200 }), contentType: s.optional(s.string({ maxLength: 100 })), contentBase64: s.string({ maxLength: 4_000_000 }) },
   handler: async (ctx, a) => {
-    const tenant = app.requireTenant(ctx);
+    app.requireTenant(ctx);
     await requireSubject(ctx, a.subjectType, a.subjectId);
-    const bytes = Uint8Array.from(Buffer.from(a.contentBase64, "base64"));
+    const bytes = fromBase64(a.contentBase64);
     if (bytes.length === 0) fail("INVALID_ARGUMENT", "The receipt is empty.");
     const file = await ctx.services.files.upload({
       name: a.name, content: bytes, ...(a.contentType ? { contentType: a.contentType } : {}),
-      metadata: { ledgerTenant: tenant.id, subjectType: a.subjectType, subjectId: a.subjectId },
+      metadata: { subjectType: a.subjectType, subjectId: a.subjectId },
     });
     return bind(ctx, file.id);
   },
@@ -253,6 +258,6 @@ export const readReceipt = app.query({
     const r = await ctx.db.get(receipts, a.receiptId);
     if (!r) fail("NOT_FOUND", "No such receipt.");
     const { file, bytes } = await ctx.services.files.read(r.fileId);
-    return { name: file.name, contentType: file.contentType ?? null, size: file.size, checksum: file.checksum ?? null, contentBase64: Buffer.from(bytes).toString("base64") };
+    return { name: file.name, contentType: file.contentType ?? null, size: file.size, checksum: file.checksum ?? null, contentBase64: toBase64(bytes) };
   },
 });

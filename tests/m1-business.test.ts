@@ -178,6 +178,25 @@ test("expenses: receipts are stored durably and read back intact; approval posts
     await assertIntegrity(org);
   }));
 
+test("a person in two organizations cannot move a receipt between them (FeltKit scopes Files to the organization)", () =>
+  withApp(async (t) => {
+    // Ledger no longer records or checks a file's organization itself (it kept `ledgerTenant` in the
+    // metadata). Two things now refuse this: FeltKit answers NOT_FOUND for another organization's file
+    // (FeltKit test/tenant-platform.test.ts, G-04), and the file's subject (Acme's expense) does not
+    // exist in Globex. The uploader check alone would not: Grace uploaded the file and Grace attaches it.
+    // This test also passes on FeltKit 0.3.25 because of the subject check; it guards the behaviour,
+    // FeltKit's tests prove the platform part.
+    const a = await newOrg(t, "Acme");
+    const b = await newOrg(t, "Globex", { owner: "gus", admin: "gia", accountant: "gil", reviewer: "gabe" }); // grace is bookkeeper in both
+    const expA = await a.bookkeeper.mutation(api.expenses.create, { date: "2026-03-01", description: "Lunch", amountMinor: 100, expenseAccountId: a.acct["6200"]!, paidFromAccountId: a.acct["2100"]! });
+    const expB = await b.bookkeeper.mutation(api.expenses.create, { date: "2026-03-01", description: "Lunch", amountMinor: 100, expenseAccountId: b.acct["6200"]!, paidFromAccountId: b.acct["2100"]! });
+    await a.bookkeeper.mutation(api.expenses.upload, { subjectType: "expense", subjectId: expA, name: "r.txt", contentBase64: Buffer.from("acme only").toString("base64") });
+    const fileId = (await a.reviewer.query(api.expenses.listReceipts, { subjectId: expA }))[0]!.fileId;
+    await rejectsWith(b.bookkeeper.mutation(api.expenses.attach, { fileId }), "NOT_FOUND");
+    assert.equal((await b.reviewer.query(api.expenses.listReceipts, { subjectId: expB })).length, 0);
+    assert.equal((await a.reviewer.query(api.expenses.listReceipts, { subjectId: expA })).length, 1);
+  }));
+
 test("tenant isolation: another organization cannot see, change, pay, or read receipts of this one's records", () =>
   withApp(async (t) => {
     const a = await newOrg(t, "Boundry LLC");
