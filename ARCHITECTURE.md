@@ -2,12 +2,14 @@
 
 Ledger is one FeltKit application: a `feltkit/` backend (collections, queries, mutations, capabilities)
 and a `src/` React frontend, served together by `feltkit dev` / `feltkit start`, with one FeltDB instance
-per environment. There is no other service, database, queue or sidecar.
+per environment. There is no other service, database, queue or sidecar. The same backend also builds into
+an AppBoundry artifact (`feltkit build --target appboundry` → `ledger.app`) and runs there with its
+organizations (tenancy@1); see "Runtimes" below.
 
 ```
 Browser (src/)  ──HTTP──▶  FeltKit runtime  ──▶  FeltDB (the only state)
 Agents          ──AppPort / MCP──▶   │                ▲
-                                     └── AppPort Services (Files, Notifications) on the same instance
+                                     └── AppPort Services (Files, Notifications, Jobs) on the same instance
 ```
 
 ## Organizations and authority
@@ -22,7 +24,13 @@ Agents          ──AppPort / MCP──▶   │                ▲
   close periods.
 - **People only for financial execution.** `requirePerson()` runs in every function that changes the
   books and in the posting engine itself. Agents propose (`review:propose`); a person approves.
-  This is portable to AppBoundry, where FeltKit's `approval: "required"` is not enforced (GAP G-03).
+  FeltKit now enforces `approval: "required"` on AppBoundry too (G-03, closed in the platform); Ledger
+  keeps `requirePerson()` because it is also the rule inside the posting engine, which no flag on a
+  function covers, and because it is tested on both runtimes (MIGRATION.md).
+- **The organization travels with all work.** Background jobs run in the organization they were queued
+  in, as the person who queued them, through their live membership (G-01); Files belong to the
+  organization they were uploaded in (G-04); a member removed is refused on their next request, job or
+  recovered effect. All of this is FeltKit's, not Ledger's.
 
 ## The ledger
 
@@ -87,7 +95,9 @@ Report shapes (all amounts in minor units) are the return types of `trialBalance
   `accounts.list`).
 - **Propose**: `proposals.create` (agents) and `review.scan` (Ledger's rules: match a recorded payment,
   repeat a payee's past single-account categorization, apply a vendor's default account). Rule proposals
-  are attributed to `ledger-rules`, with who triggered them in the evidence.
+  are attributed to `ledger-rules`, with who triggered them in the evidence. After a statement import,
+  the scan runs as a background job (`review.scan` → `review:scanJob`), queued after the import commits;
+  `review:scan` stays callable on demand.
 - **Approve**: `review:approve` — a person, not the proposer, holding `proposals.decide` **and** the action's
   own permission. Execution runs through the same functions as direct actions, in the approver's
   transaction; the entry carries `proposalId` and `approvedBy`. A stale proposal fails as a whole.
@@ -97,6 +107,24 @@ Report shapes (all amounts in minor units) are the return types of `trialBalance
   invoices and bills, accounts not reconciled in 45 days.
 
 No model is called anywhere. The Intelligence service is not enabled.
+
+Ledger's proposals are its own tenant-scoped records (evidence, separation of duties, execution in the
+approver's transaction), not FeltKit's agent tasks. FeltKit's tasks are now scoped to the organization
+too (G-02), so either would be safe; Ledger keeps its own because its proposals carry accounting
+evidence and rules that are Ledger's business logic, not a platform workaround.
+
+## Runtimes
+
+| | FeltKit server (`feltkit start`) | AppBoundry (`ledger.app`) |
+|---|---|---|
+| Sign-in | Built-in accounts (sign-up, e-mail) | Operator-issued sessions (`appboundry admin users add`, `sessions issue`); the host must be started with `--accounts operator-sessions` because Ledger declares `auth.accounts` |
+| Organizations | Create, invite by e-mail, switch | Create, switch, members and roles over the same `/api/tenants/*` routes; members are provisioned by an operator (`appboundry admin tenants provision`), not invited |
+| Books, reports, receipts, banking, review | Yes | Yes, same code (`tests-artifact/`, `scripts/appboundry-acceptance.mts`) |
+| Background review scan | Yes | Yes (AppBoundry's job worker) |
+| Agents | Propose via AppPort/MCP; FeltKit agent lifecycle available | Propose via AppPort/MCP; approval-required functions refused to agents (no lifecycle in an artifact) |
+
+Backend code must stay portable to the artifact's guest: no Node APIs (`Buffer`, `node:*`) and no Web
+Crypto. Ledger uses `feltkit/_base64.ts` and FeltKit's `sha256Hex` for that.
 
 ## Frontend
 

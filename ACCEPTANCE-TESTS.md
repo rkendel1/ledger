@@ -1,8 +1,11 @@
 # Acceptance tests
 
-`npm test` runs 30 tests (`tests/*.test.ts`), each against a fresh FeltDB instance with a real
-organization whose members joined through real FeltKit invitations. Last run: **30 passed, 0 failed**.
-`npm run test:artifact` builds the AppBoundry artifact and runs `tests-artifact/` (1 passed).
+`npm test` runs 34 tests (`tests/*.test.ts`), each against a fresh FeltDB instance with a real
+organization whose members joined through real FeltKit invitations. Last run (2026-11-12, vendored
+FeltKit `66e4a11`): **34 passed, 0 failed**. `npm run test:artifact` builds the AppBoundry artifact and
+runs Ledger's core workflows in two organizations inside it (1 test, passed).
+`scripts/appboundry-acceptance.mts` runs Ledger on AppBoundry's own host in production mode over HTTP:
+10 checks passed (`evidence/appboundry-acceptance.txt`).
 Most scenarios end with `assertIntegrity`, which recomputes every ledger invariant from stored records.
 
 | Requirement | Test | Status |
@@ -33,7 +36,7 @@ Most scenarios end with `assertIntegrity`, which recomputes every ledger invaria
 | Unauthorized expense modification | m1 expenses (reviewer upload; edit after approval) | Pass |
 | Unauthorized period closure | m0 closed periods (bookkeeper, reviewer) | Pass |
 | Unauthorized agent execution | m4 (assistant role; agent wrongly given bookkeeper role) | Pass |
-| File access across organizations | m1 tenant isolation (read, link, attach a foreign file id) | Pass |
+| File access across organizations | m1 tenant isolation (read, link, attach a foreign file id); m1 "a person in two organizations cannot move a receipt" (Ledger's own file-organization check removed; the platform's is proven in FeltKit's G-04 tests) | Pass |
 | Modifying posted records | m0 drafts (edit/delete posted), m1 (edit issued invoice, reverse a document's entry directly) | Pass |
 | **Reliability** | | |
 | Retries without duplicate effects | m0 idempotency (journal), m1 payments (payment key), m2 (re-import) | Pass |
@@ -45,8 +48,13 @@ Most scenarios end with `assertIntegrity`, which recomputes every ledger invaria
 | Deterministic rules, no duplicates, stale safety | m4 rules | Pass |
 | Review queue items | m4 queue | Pass |
 | Works with no AI service | Whole suite (no model configured) | Pass |
+| Rules run in the background, in the importer's organization; refused once they leave | m4 "background job" (fails on published FeltKit 0.3.25) | Pass |
 | **Platform** | | |
-| Artifact builds and loads | tests-artifact | Pass (but see GAP G-05: organizations closed on AppBoundry) |
+| Artifact builds and loads | tests-artifact | Pass |
+| Organizations on AppBoundry: create, provision, switch, isolation, removal | tests-artifact (reference host); scripts/appboundry-acceptance.mts (AppBoundry host, HTTP, production) | Pass |
+| Core workflows on AppBoundry: setup, invoice, payment, receipt, import, categorize, journal, reports, integrity | tests-artifact; appboundry-acceptance (invoice, payment, receipt, import + background scan, reports, integrity) | Pass |
+| Backend code portable to the artifact (no Buffer, no Web Crypto) | base64.test.ts; tests-artifact | Pass |
+| Vendored FeltKit is the recorded build | vendor.test.ts | Pass |
 
 ## Manual verification
 
@@ -58,4 +66,6 @@ raised. This is not an automated test.
 ## Not done
 
 Performance/load testing, crash-injection recovery testing, a security audit beyond the tests above,
-HTTP/MCP-level tests of the published capabilities, deployment, and the real-world Boundry trial (M5).
+HTTP/MCP-level tests of the published capabilities on the FeltKit server, deployment, and the
+real-world Boundry trial (M5). On AppBoundry: sign-up and invitations (not served there), the browser
+UI (only the HTTP API was exercised), and Ledger's AppPort/MCP capabilities.

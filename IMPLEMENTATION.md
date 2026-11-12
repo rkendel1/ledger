@@ -11,7 +11,7 @@ What exists, how it was verified, and what does not exist yet. Platform findings
 | M2 Banking | Done | CSV import, normalization, duplicate detection, match, split categorization, exclude, unmatch-by-reversal, reconciliation sessions. |
 | M3 Reporting | Done | P&L, balance sheet, cash flow, trial balance, GL, account history, AR/AP aging, overview, audit view. |
 | M4 Agentic bookkeeping | Done, deterministic | Proposals, approval with separation of duties, three rules, review queue, report-change explanation. No model. |
-| M5 Production readiness | **Partial** | Node build verified; AppBoundry artifact builds but cannot serve organizations (G-05). No deployment, load test, recovery test, external security audit, or Boundry trial. |
+| M5 Production readiness | **Partial** | Node build verified. Runs on AppBoundry with organizations (reference host test and AppBoundry's own host over HTTP, production mode). FeltKit is a vendored pre-release (vendor/feltkit). No deployment, load test, recovery test, external security audit, or Boundry trial. |
 
 ## Layout
 
@@ -49,9 +49,9 @@ Each chart has loading and empty states and a data table. With no postings the c
   (checked by `integrity:check`).
 - **Derived, not stored:** invoice and bill payment status, balances, overdue.
 - **No `approval: "required"`.** It was used, then removed in favour of Ledger's own `requirePerson()`
-  because it is not enforced in AppBoundry artifacts and routes agents to non-tenant-aware proposals
-  (G-02, G-03).
-- **No Jobs.** Rules run synchronously because jobs lose the organization (G-01).
+  when it was not enforced in artifacts (G-03) and FeltKit's proposals were not organization-aware (G-02).
+  Both are fixed in the platform; Ledger still relies on `requirePerson()` (MIGRATION.md says why).
+- **The review scan is a background job** after each import (G-01, fixed in FeltKit), and on demand.
 - **Rule proposals belong to `ledger-rules`**, so the person who ran the rules may approve them.
 
 ## Known limitations
@@ -68,14 +68,18 @@ Each chart has loading and empty states and a data table. With no postings the c
 - Studio, MCP and the AppPort HTTP surface were not exercised by Ledger's tests.
 - Charts were checked by hand in the browser (desktop, 390px, light theme) on test postings; Ledger has no automated browser test of its pages. The chart components themselves are tested in stack-ui.
 - Browser receipt upload (`expenses:uploadLink` → `client.uploadFile` → `expenses:attach`) was not exercised; server-side upload (`expenses:upload`) is tested.
+- On AppBoundry, people cannot sign up or be invited by e-mail (no accounts@1): an operator issues sessions and provisions members.
+- FeltKit is a vendored, unpublished build (`vendor/feltkit`, reporting version 0.3.25). Replace it with a published version when one exists.
 
 ## Verification commands
 
 ```bash
 npm install
 npx tsc --noEmit                 # typecheck backend, UI and tests
-npm test                         # 28 tests against fresh FeltDB instances
+npm test                         # 34 tests against fresh FeltDB instances
 npx feltkit build                # Node build: bundle, schema contract, frontend, secret scan
-npm run test:artifact            # AppBoundry artifact build + test
+npm run test:artifact            # AppBoundry artifact build + core workflows in organizations
+# Ledger on AppBoundry's own host (needs an AppBoundry checkout; see the script's header):
+APPBOUNDRY_HOST=<appboundry>/packages/appboundry-host/dist/index.js npx tsx scripts/appboundry-acceptance.mts ledger.app
 npm run dev                      # http://localhost:3000, sign in as a development user
 ```
