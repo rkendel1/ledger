@@ -5,7 +5,8 @@
 import { report } from "./_contracts.js";
 import type { QueryCtx } from "@feltdb/feltkit";
 import { app, accounts, journalEntries, ledgerLines } from "./app.js";
-import { requireSettings } from "./_ledger.js";
+import { normalBalance, requireSettings } from "./_ledger.js";
+import { openBills, openInvoices } from "./_documents.js";
 
 export const check = app.query({
   access: "reports.read",
@@ -57,6 +58,17 @@ export async function integrityData(ctx: QueryCtx) {
     numbers.forEach((n, i) => {
       if (n !== i + 1) problems.push(`Journal numbering is not gapless at position ${i + 1} (found #${n}).`);
     });
+    // Subledgers: the receivable and payable control accounts equal their open documents.
+    const all = await ctx.db.find(accounts, {});
+    const control = (subtype: string) => {
+      const acc = all.find((a) => a.subtype === subtype && a.system);
+      return acc ? lines.filter((l) => l.accountId === acc.id).reduce((t, l) => t + normalBalance(acc.type, l.debit, l.credit), 0) : 0;
+    };
+    const far = "9999-12-31";
+    const arOpen = (await openInvoices(ctx, far)).reduce((t, i) => t + i.balanceMinor, 0);
+    const apOpen = (await openBills(ctx, far)).reduce((t, b) => t + b.balanceMinor, 0);
+    if (control("receivable") !== arOpen) problems.push(`Accounts Receivable ${control("receivable")} ≠ open invoices ${arOpen}.`);
+    if (control("payable") !== apOpen) problems.push(`Accounts Payable ${control("payable")} ≠ open bills ${apOpen}.`);
     const debits = lines.reduce((t, l) => t + l.debit, 0);
     const credits = lines.reduce((t, l) => t + l.credit, 0);
     if (debits !== credits) problems.push(`Trial balance is out by ${debits - credits}.`);

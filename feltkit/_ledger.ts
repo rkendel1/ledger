@@ -118,6 +118,26 @@ function loadAccount(ctx: QueryCtx | MutationCtx, id: string) {
   return ctx.db.get(accounts, id);
 }
 
+/** Sources allowed to post to the receivable / payable control accounts: the documents those subledgers track. */
+const CONTROL_SOURCES: Record<string, ReadonlySet<string>> = {
+  receivable: new Set(["invoice", "credit_note", "payment_received"]),
+  payable: new Set(["bill", "payment_made"]),
+};
+
+/**
+ * Accounts Receivable and Accounts Payable are control accounts: their balance must equal the open
+ * invoices and bills. Only those documents' workflows post to them; a manual journal, a bank
+ * categorization or an opening balance cannot.
+ */
+export function requireControlAccountsByWorkflow(sourceType: string, used: ReadonlyArray<{ subtype: string; system: boolean; name: string }>) {
+  for (const acc of used) {
+    const allowed = acc.system ? CONTROL_SOURCES[acc.subtype] : undefined;
+    if (allowed && !allowed.has(sourceType)) {
+      fail("FAILED_PRECONDITION", `${acc.name} is a control account kept by ${acc.subtype === "receivable" ? "invoices, credit notes and customer payments" : "bills and vendor payments"}. Record the document instead of a journal line.`);
+    }
+  }
+}
+
 /** The system account of a subtype (receivable, payable, tax_payable, opening_balance, retained_earnings). */
 export async function systemAccount(ctx: QueryCtx | MutationCtx, subtype: "receivable" | "payable" | "opening_balance" | "retained_earnings") {
   const [account] = await ctx.db.find(accounts, { subtype, system: true });
@@ -139,7 +159,8 @@ export async function postEntry(ctx: MutationCtx, input: PostInput) {
   if (total <= 0) fail("INVALID_ARGUMENT", "A journal entry must move a positive amount.");
   const settings = await requireSettings(ctx);
   requireOpenPeriod(settings.closedThrough, input.date);
-  await requireActiveAccounts(ctx, input.lines.map((l) => l.accountId));
+  const used = await requireActiveAccounts(ctx, input.lines.map((l) => l.accountId));
+  requireControlAccountsByWorkflow(input.sourceType, [...used.values()]);
 
   const number = await ctx.db.sequence(`journal:${tenant.id}`);
   const now = Date.now();

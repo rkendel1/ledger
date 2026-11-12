@@ -3,7 +3,7 @@
  */
 import { fail, s } from "@feltdb/feltkit";
 import { accounts, app, audit, journalEntries, ledgerLines } from "./app.js";
-import { actor, entryLines, postEntry, requireActiveAccounts, requireDate, requireSettings, reverseEntry, validateLines } from "./_ledger.js";
+import { actor, entryLines, postEntry, requireActiveAccounts, requireControlAccountsByWorkflow, requireDate, requireSettings, reverseEntry, validateLines } from "./_ledger.js";
 
 const lineArg = s.object({
   accountId: s.string(),
@@ -26,7 +26,7 @@ export const createDraft = app.mutation({
     await requireSettings(ctx);
     requireDate(a.date);
     const total = validateLines(a.lines);
-    await requireActiveAccounts(ctx, a.lines.map((l) => l.accountId));
+    requireControlAccountsByWorkflow("manual", [...(await requireActiveAccounts(ctx, a.lines.map((l) => l.accountId))).values()]);
     const id = await ctx.db.insert(journalEntries, {
       number: 0, status: "draft", date: a.date, description: a.description.trim(), sourceType: "manual",
       draftLines: cleanLines(a.lines), totalMinor: total, createdBy: actor(ctx), createdAt: Date.now(),
@@ -46,7 +46,7 @@ export const updateDraft = app.mutation({
     if (draft.status !== "draft") fail("FAILED_PRECONDITION", `Journal entry ${draft.number} is posted. Posted entries cannot be edited; reverse it and post a correction.`);
     requireDate(a.date);
     const total = validateLines(a.lines);
-    await requireActiveAccounts(ctx, a.lines.map((l) => l.accountId));
+    requireControlAccountsByWorkflow("manual", [...(await requireActiveAccounts(ctx, a.lines.map((l) => l.accountId))).values()]);
     await ctx.db.patch(journalEntries, a.id, { date: a.date, description: a.description.trim(), draftLines: cleanLines(a.lines), totalMinor: total, ...(a.reference ? { reference: a.reference } : {}) });
     await audit.record(ctx, { subject: "journal", id: a.id, type: "journal.draft.updated", data: { date: a.date, totalMinor: total } });
     return { ok: true };

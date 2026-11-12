@@ -164,6 +164,7 @@ export const setOpeningBalances = app.mutation({
       const account = await ctx.db.get(accounts, b.accountId);
       if (!account) fail("INVALID_ARGUMENT", `Unknown account ${b.accountId}.`);
       if (account.id === equity.id) fail("INVALID_ARGUMENT", "Opening Balance Equity is the balancing account; do not list it.");
+      if (account.system && (account.subtype === "receivable" || account.subtype === "payable")) fail("INVALID_ARGUMENT", `${account.name}: enter open invoices and bills as documents, not as an opening balance.`);
       if (account.type === "revenue" || account.type === "expense") fail("INVALID_ARGUMENT", `${account.name}: opening balances are for balance-sheet accounts.`);
       if (b.balanceMinor === 0) continue;
       // A positive balance is in the account's normal direction.

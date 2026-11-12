@@ -23,6 +23,9 @@ test("setup creates the organization's settings and starting chart, once", () =>
     await rejectsWith(org.accountant.mutation(api.accounts.create, { number: "6950", name: "Dup", type: "expense", subtype: "expense" }), "CONFLICT");
     await rejectsWith(org.accountant.mutation(api.accounts.create, { number: "6960", name: "Wrong", type: "expense", subtype: "bank" }), "INVALID_ARGUMENT");
     await rejectsWith(org.accountant.mutation(api.accounts.update, { id: org.acct["1100"]!, active: false }), "FAILED_PRECONDITION");
+    // Control accounts: a manual journal cannot touch Accounts Receivable or Payable.
+    await rejectsWith(org.accountant.mutation(api.journal.createAndPost, { date: "2026-01-02", description: "Fake receivable", lines: [{ accountId: org.acct["1100"]!, debit: 100, credit: 0 }, { accountId: org.acct["4000"]!, debit: 0, credit: 100 }] }), "FAILED_PRECONDITION", /control account/);
+    await rejectsWith(org.bookkeeper.mutation(api.journal.createDraft, { date: "2026-01-02", description: "Fake payable", lines: [{ accountId: org.acct["6500"]!, debit: 100, credit: 0 }, { accountId: org.acct["2000"]!, debit: 0, credit: 100 }] }), "FAILED_PRECONDITION", /control account/);
   }));
 
 test("posting: balanced entries post with gapless numbers; unbalanced and malformed entries are refused", () =>
@@ -51,11 +54,11 @@ test("drafts never affect balances or reports; posted entries cannot be edited o
   withApp(async (t) => {
     const org = await newOrg(t);
     const { acct } = org;
-    const draft = await org.bookkeeper.mutation(api.journal.createDraft, { date: "2026-03-01", description: "Accrue rent", lines: [dl(acct["6500"]!, 200000), cr(acct["2000"]!, 200000)] });
+    const draft = await org.bookkeeper.mutation(api.journal.createDraft, { date: "2026-03-01", description: "Accrue rent", lines: [dl(acct["6500"]!, 200000), cr(acct["2500"]!, 200000)] });
     const tb = await org.reviewer.query(api.reports.trialBalance, { asOf: "2026-12-31" });
     assert.equal(tb.totalDebitMinor, 0);
     assert.ok((await org.reviewer.query(api.accounts.list, {})).every((a) => a.balanceMinor === 0));
-    await org.bookkeeper.mutation(api.journal.updateDraft, { id: draft, date: "2026-03-01", description: "Accrue March rent", lines: [dl(acct["6500"]!, 210000), cr(acct["2000"]!, 210000)] });
+    await org.bookkeeper.mutation(api.journal.updateDraft, { id: draft, date: "2026-03-01", description: "Accrue March rent", lines: [dl(acct["6500"]!, 210000), cr(acct["2500"]!, 210000)] });
     await rejectsWith(org.bookkeeper.mutation(api.journal.post, { id: draft }), "FORBIDDEN");
     const posted = await org.accountant.mutation(api.journal.post, { id: draft });
     assert.equal(posted.number, 1);
@@ -188,7 +191,8 @@ test("concurrency: simultaneous postings each commit once with distinct numbers;
 test("property: random valid and invalid entries keep every invariant (seeded)", () =>
   withApp(async (t) => {
     const org = await newOrg(t);
-    const ids = Object.values(org.acct);
+    // Every account except the AR/AP control accounts, which only their documents may post to.
+    const ids = Object.entries(org.acct).filter(([n]) => n !== "1100" && n !== "2000").map(([, id]) => id);
     const r = rng(20261111);
     let posted = 0;
     let refused = 0;

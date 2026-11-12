@@ -2,6 +2,7 @@
 /* eslint-disable */
 import { createApi } from "@feltdb/feltkit/client";
 import type * as accounts_module from "../accounts.js";
+import type * as activity_module from "../activity.js";
 import type * as app_module from "../app.js";
 import type * as banking_module from "../banking.js";
 import type * as bills_module from "../bills.js";
@@ -12,9 +13,10 @@ import type * as integrity_module from "../integrity.js";
 import type * as invoices_module from "../invoices.js";
 import type * as journal_module from "../journal.js";
 import type * as org_module from "../org.js";
+import type * as overview_module from "../overview.js";
 import type * as payments_module from "../payments.js";
 import type * as reconciliation_module from "../reconciliation.js";
 import type * as reports_module from "../reports.js";
 
 /** Typed references to every query and mutation. Type-only imports: no backend code reaches the browser. */
-export const api = createApi<{ "accounts": typeof accounts_module; "app": typeof app_module; "banking": typeof banking_module; "bills": typeof bills_module; "contacts": typeof contacts_module; "expenses": typeof expenses_module; "inbox": typeof inbox_module; "integrity": typeof integrity_module; "invoices": typeof invoices_module; "journal": typeof journal_module; "org": typeof org_module; "payments": typeof payments_module; "reconciliation": typeof reconciliation_module; "reports": typeof reports_module }>();
+export const api = createApi<{ "accounts": typeof accounts_module; "activity": typeof activity_module; "app": typeof app_module; "banking": typeof banking_module; "bills": typeof bills_module; "contacts": typeof contacts_module; "expenses": typeof expenses_module; "inbox": typeof inbox_module; "integrity": typeof integrity_module; "invoices": typeof invoices_module; "journal": typeof journal_module; "org": typeof org_module; "overview": typeof overview_module; "payments": typeof payments_module; "reconciliation": typeof reconciliation_module; "reports": typeof reports_module }>();
