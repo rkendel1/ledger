@@ -1,13 +1,14 @@
-ok  loaded ledger; interfaces collections, services, identity, web, transactions, tenancy
+ok  appboundry run ledger.app (production, operator sessions) is healthy on http://127.0.0.1:40635
+ok  the operator bootstrapped, added people and an agent, and issues their sessions
 ok  a person creates an organization over HTTP and works in it (owner)
-ok  the operator provisions a bookkeeper, an agent member, and a second organization
+ok  `appboundry admin tenants provision` adds a bookkeeper, an agent member, and a second organization
 ok  both organizations set up their books (default chart of accounts)
 ok  the bookkeeper issues an invoice and records its payment
 ok  a receipt is stored and read back in Acme; Globex gets NOT_FOUND
-ok  an import queues the review scan; the background job proposes in Acme only
+ok  an import queues the review scan; the runtime's job worker proposes in Acme only
 ok  the agent member reads reports and cannot execute a financial action
 ok  trial balance balances, integrity check is clean, Globex sees no Acme invoice
 ok  a removed bookkeeper loses the organization on the next request
 all checks passed
 
-# 2026-11-12T02:25Z ledger.app built with FeltKit 66e4a11 (claude/happy-fermat-wynpur); AppBoundry host b706321 (claude/happy-fermat-wynpur) built from source; production environment, over HTTP
+# 2026-11-12T15:46Z: ledger.app built with FeltKit 91c4be4 (vendored, rkendel1/feltkit#114); run by the published @appport/appboundry 1.12.0 CLI (`appboundry run`, `appboundry admin`), production, local state, over HTTP. `npm run test:appboundry`.

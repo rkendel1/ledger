@@ -59,7 +59,7 @@ test("an agent reads and proposes, but cannot execute any financial action, even
     await rejectsWith(rogue.mutation(api.invoices.issue, { id: "anything" }), "FORBIDDEN");
     await rejectsWith(rogue.mutation(api.review.approve, { id: p.id }), "FORBIDDEN");
     // Refused by Ledger's own person-only rule (portable to AppBoundry, where FeltKit's approval flag is
-    // not enforced), and the refusal is in FeltKit's activity log as evidence.
+    // FeltKit's approval flag is now enforced there too), and the refusal is in FeltKit's activity log as evidence.
     const refused = (await t.runtime.activity.list({ name: "banking:categorize" })).find((e) => e.principal?.id === "rogue-bot");
     assert.ok(refused);
     assert.notEqual(refused!.outcome, "success");
