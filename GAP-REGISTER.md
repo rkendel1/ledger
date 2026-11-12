@@ -7,6 +7,12 @@ Each entry names the evidence that established it. "Recommended ownership" is wh
 AppBoundry, each with a reproduction test that fails on the original code and passes on the fix, run on
 both runtimes. See [Remediation](#remediation) below; the original entries are kept as found.
 
+**Release status (2026-11-12, re-checked).** AppBoundry's changes are merged (rkendel1/appboundry#79) and
+published (`@appport/appboundry` 1.12.0); Stack UI 0.9.0 is published. FeltKit's are **not merged**
+(rkendel1/feltkit#114, open) and **not in the published 0.3.26**, on which Ledger fails (typecheck,
+organization setup, artifact build). Ledger installs a build of #114 (`vendor/feltkit`). See
+[What is left](#what-is-left).
+
 ## Platform capability inventory
 
 Inspected in the published packages (`node_modules/@feltdb/feltkit/dist`, `@appport/*`), the
@@ -43,7 +49,7 @@ Inspected in the published packages (`node_modules/@feltdb/feltkit/dist`, `@appp
 | G-07 | Notifications belong to the person, not the organization. | `ctx.services.notifications.list` returns the caller's own notices across tenants. | A person in two organizations sees both organizations' notices in one inbox. | Low | AppPort Services | Notices carry only a title and a record id; opening one in the wrong organization finds nothing. |
 | G-08 | A unique constraint on a tenant-scoped collection is global unless it names the tenant field, and it can name it only if the shape declares it. | Build error: `unique constraint names "tenantId", which the collection does not declare`. | Easy to create cross-organization uniqueness by accident (e.g. two organizations both wanting account 1000). | Medium | FeltKit (make uniques tenant-relative by default) | Every tenant collection declares `tenantId: s.optional(s.string())` and every unique includes it. |
 | G-09 | ~~`ctx.db.patch` cannot remove a field (`undefined` is not stored).~~ **Wrong.** FeltKit removes a field patched to `undefined`, on its runtime (`runtime/data.ts` patch) and in an artifact (`appboundry/guest.ts`, `unset`). | Re-checked in the source during remediation; `m2` asserts the stale `journalEntryId` is gone after unmatching, with plain `patch`. | None. | — | — | `patchRemoving()` removed; plain `ctx.db.patch(…, { field: undefined })`. |
-| G-10 | FeltKit's tenant screens say "Create a organization". | UI walkthrough. | Cosmetic. | Low | FeltKit | None. |
+| G-10 | FeltKit's tenant screens say "Create a organization". | UI walkthrough. | Cosmetic. | Low | FeltKit | **Fixed in FeltKit** (`words.ts` `withArticle`, rkendel1/feltkit#114 @ `91c4be4`); in the build Ledger installs. |
 | G-11 | Report capabilities publish loose output contracts (`record<unknown>`). | `feltkit/_contracts.ts`. | Agents and other apps get no field-level contract for reports. | Low | Ledger | TypeScript callers are fully typed; shapes documented in ARCHITECTURE.md. |
 | G-12 | Reports and the review queue read every ledger line of the organization on each request. | `reports.ts` `totalsByAccount`. | Fine for thousands of entries; untested beyond that. | Medium | Ledger (period balances or FeltDB aggregates) | None yet. No performance testing was done. |
 | G-13 | Single currency only. | `expenses.ts` refuses a non-base currency. | Foreign-currency spend must be converted before entry. | Medium | Ledger | Clear refusal message. |
@@ -60,7 +66,7 @@ would have chosen and wrapped its own library. This was solved in the platform, 
 |---|---|---|---|
 | V-01 | No shared data-visualization capability in the FeltKit UI ecosystem. | stack-ui 0.8.1 contract §5: "Not in the initial inventory: charts … product-owned until two products need the same one". | **Implemented in stack-ui 0.9.0** (`rkendel1/stack-ui` branch `claude/happy-fermat-wynpur`, decision D38, `docs/charts.md`): `LineChart`, `AreaChart`, `BarChart`, `StackedBarChart`, `DonutChart`, `Sparkline`, native SVG, no dependencies. Not yet tagged or published: the owner tags the release. |
 | V-02 | Ledger is the only real consumer so far; stack-ui's rule wants two. | D38 records an owner-directed exception. | stack-ui. The next product dashboard (FeltKit Studio, FeltDB Studio) should adopt the charts. |
-| V-03 | stack-ui 0.9.0 is not on npm; Ledger vendors it. | `npm view @stack-ui/core` shows 0.8.1; stack-ui docs/release.md prescribes vendoring with `file:` dependencies until publishing. | Ledger vendors `vendor/stack-ui` with `scripts/vendor-packages.mjs`; `tests/vendor.test.ts` checks every file against `SHA256SUMS`, which equals stack-ui's recorded `releases/0.9.0/packages.SHA256SUMS`. Switch to npm once published. |
+| V-03 | stack-ui 0.9.0 was not on npm; Ledger vendored it. | — | **Closed.** 0.9.0 is published; its files are identical to the vendored copy (checked file by file, 2026-11-12). Ledger installs it from npm; `vendor/stack-ui` is gone. |
 | V-04 | `@stack-ui/core/html`, `/view` and `/dom` ship no TypeScript declarations (pre-existing). | stack-ui's packed-tarball consumer test failed on `@stack-ui/core/html` until it declared the module. | stack-ui. The new `@stack-ui/core/charts` entry point ships declarations. |
 | V-05 | Ledger's own layout scrolled horizontally at phone width (32px). | Found while checking charts at 390px: the shell's grid column took the navigation's min-content width. | Fixed in Ledger (`minmax(0, 1fr)`). Not a chart defect. |
 | V-06 | Ledger adopts only stack-ui's charts, tokens and core CSS, not its Shell or other components, so it does not pass stack-ui's application conformance check. | stack-ui docs/building-with-the-foundation.md. | Ledger. A full adoption is a separate change. |
@@ -95,5 +101,46 @@ Still open, and why:
   they name the tenant field): not addressed; Ledger's workarounds stay.
 - **Schedules**: a recurring schedule's jobs carry no workspace (no initiator request to take one from).
   Ledger uses none.
-- **Published releases**: none of the platform changes is published. Ledger vendors a FeltKit build;
-  AppBoundry was verified from source.
+- **Published releases**: AppBoundry 1.12.0 and Stack UI 0.9.0 are published and used. FeltKit #114 is
+  not merged or published.
+
+## What is left
+
+Re-checked 2026-11-12 against FeltKit 0.3.26 (npm and #114), AppBoundry 1.12.0, AppPort Services 0.16.3.
+
+**Blocking a clean dependency set**
+
+1. **Merge and release rkendel1/feltkit#114** (FeltKit owner). It is up to date with main (0.3.26) and its
+   suite shows no failure that main does not also have here. Then Ledger switches `@feltdb/feltkit` to
+   that version and deletes `vendor/feltkit` and `tests/vendor.test.ts` (MIGRATION.md).
+
+**Platform, still open (Ledger workaround stays until fixed)**
+
+2. **Sign-in on AppBoundry** (FK-GAP-013 accounts@1). No sign-up, password or e-mail there, and Ledger's
+   browser UI cannot receive an operator-issued token, so in production the UI cannot sign in on AppBoundry
+   (the HTTP API works). Needs accounts@1 or an operator-issued sign-in link in AppBoundry/FeltKit; Ledger
+   should not build its own token screen.
+3. **G-07** notifications belong to the person, not the organization (AppPort Services). Workaround: notices
+   carry only a title and a record id.
+4. **G-08** a unique constraint on a tenant collection is global unless it names the tenant field (FeltKit).
+   Workaround: every tenant collection declares `tenantId` and every unique includes it.
+5. **Files from before G-04** carry no organization and become invisible; no API assigns one. Ledger has no
+   deployed data, so nothing to migrate, but any operator upgrading a live FeltKit app needs one.
+6. **Schedules** carry no workspace (unused by Ledger).
+7. **G-06** write-once collections in FeltDB: decided not to build until a second product needs them;
+   `integrity:check` stays.
+
+**Ledger's own work (not platform gaps)**
+
+8. **M5 production readiness**: a deployment, load testing (G-12: reports read every ledger line), crash
+   and recovery testing, a security review, and the real-world Boundry trial.
+9. **Product gaps**: multi-currency (G-13), opening AR/AP balances (G-14), bank connectivity (G-15), field-level
+   report contracts (G-11), unapplied payments and prepayments, removing a mistaken receipt.
+10. **Untested surfaces**: the browser receipt upload path, Ledger's AppPort/MCP capabilities over HTTP, any
+    automated browser test of Ledger's pages.
+
+**Kept by decision, not workarounds**
+
+- `requirePerson()`: FeltKit now enforces `approval: "required"` on both runtimes, but Ledger's rule also
+  guards the shared posting engine, which no function-level flag covers.
+- Ledger's own proposals: accounting evidence and separation of duties are Ledger's business logic.
